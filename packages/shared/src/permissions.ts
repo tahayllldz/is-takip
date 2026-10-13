@@ -64,6 +64,7 @@ export const PERMISSIONS = [
   { key: 'audit.view', module: 'core', scope: 'company', label: 'İşlem geçmişini görme' },
   { key: 'archive.view', module: 'core', scope: 'company', label: 'Kapalı modüllerin verisini salt okunur görme' },
   { key: 'dashboard.manage_defaults', module: 'core', scope: 'company', label: 'Varsayılan ana sayfa düzenini belirleme' },
+  { key: 'branding.manage', module: 'core', scope: 'company', label: 'Şirket logosunu ve uygulama renklerini yönetme' },
   { key: 'tasks.create', module: 'tasks', scope: 'company', label: 'Kendine görev oluşturma' },
   { key: 'tasks.assign', module: 'tasks', scope: 'group', label: 'Başkasına görev atama' },
   { key: 'tasks.view_all', module: 'tasks', scope: 'group', label: 'Kapsamdaki tüm görevleri görme' },

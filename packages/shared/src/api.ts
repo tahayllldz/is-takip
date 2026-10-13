@@ -32,6 +32,7 @@ import type {
 } from './types';
 import type { TaskPriority } from './tasks';
 import type { DashboardPlatform } from './dashboard';
+import { brandingConfigSchema, normalizeTargets, type BrandingConfig, type CompanyBranding } from './branding';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Client = SupabaseClient<any, any, any>;
@@ -736,6 +737,114 @@ export async function uploadAttachment(
   return path;
 }
 
+// =====================================================================
+// Şirket marka teması (logo özel depoda; tema satırını üyeler okur, yazma RPC ile)
+// =====================================================================
+export const BRANDING_BUCKET = 'company-branding';
+export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+export function brandLogoPath(companyId: string, uploadId: string): string {
+  return `${companyId}/logo-${uploadId}.png`;
+}
+
+interface BrandingRow {
+  company_id: string;
+  logo_path: string | null;
+  logo_background: CompanyBranding['logoBackground'];
+  palette: CompanyBranding['palette'];
+  overrides: CompanyBranding['overrides'] | null;
+  swatches: CompanyBranding['swatches'] | null;
+  targets: unknown;
+  preset: CompanyBranding['preset'];
+  mode: 'light';
+  config_version: number;
+  version: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+function toBranding(r: BrandingRow): CompanyBranding {
+  return {
+    companyId: r.company_id,
+    logoPath: r.logo_path,
+    logoBackground: r.logo_background,
+    palette: r.palette,
+    overrides: r.overrides ?? {},
+    swatches: r.swatches ?? [],
+    targets: normalizeTargets(r.targets),
+    preset: r.preset,
+    mode: r.mode,
+    configVersion: r.config_version,
+    version: r.version,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by,
+  };
+}
+
+/** Şirketin teması; hiç kaydedilmemişse null (uygulamanın kendi teması) */
+export async function fetchCompanyBranding(c: Client, companyId: string): Promise<CompanyBranding | null> {
+  const row = await run<BrandingRow | null>(c.from('company_branding').select('*').eq('company_id', companyId).maybeSingle());
+  return row ? toBranding(row) : null;
+}
+
+/** Kaydeder; `expectedVersion` başkasının arada yaptığı değişikliği ezmeyi önler (ilk kayıtta null) */
+export async function saveCompanyBranding(
+  c: Client,
+  companyId: string,
+  config: BrandingConfig,
+  expectedVersion: number | null,
+): Promise<CompanyBranding> {
+  const parsed = brandingConfigSchema.safeParse(config);
+  if (!parsed.success) throw new AppError('invalid', parsed.error.issues[0]?.message ?? 'Tema ayarları geçersiz.');
+  const row = await run<BrandingRow>(
+    c.rpc('save_company_branding', { p_company: companyId, p_config: parsed.data, p_expected_version: expectedVersion }),
+  );
+  return toBranding(row);
+}
+
+/** Uygulamanın kendi temasına döner; eski logo depodan silinir (kullanılmayan logo politikası izin verir) */
+export async function resetCompanyBranding(c: Client, companyId: string, expectedVersion: number | null): Promise<void> {
+  const oldLogo = await run<string | null>(c.rpc('reset_company_branding', { p_company: companyId, p_expected_version: expectedVersion }));
+  if (oldLogo) await removeBrandLogo(c, oldLogo);
+}
+
+/** Logoyu (uygulamada küçültülüp PNG'ye çevrilmiş hâliyle) özel depoya yükler; yolu döndürür */
+export async function uploadBrandLogo(c: Client, companyId: string, uploadId: string, body: ArrayBuffer | Uint8Array): Promise<string> {
+  if (body.byteLength > LOGO_MAX_BYTES) throw new AppError('invalid', 'Logo 2 MB’tan büyük olamaz.');
+  const path = brandLogoPath(companyId, uploadId);
+  let res: { error: unknown };
+  try {
+    res = await c.storage.from(BRANDING_BUCKET).upload(path, body, { contentType: 'image/png', upsert: false });
+  } catch (e) {
+    throw toAppError(e);
+  }
+  if (res.error) {
+    const err = res.error as { statusCode?: string | number; status?: number; message?: string };
+    const status = String(err.statusCode ?? err.status ?? '');
+    if (status === '409' || /already exists|duplicate/i.test(err.message ?? '')) return path;
+    if (status === '413' || /maximum allowed size|too large/i.test(err.message ?? '')) throw new AppError('invalid', 'Logo 2 MB’tan büyük olamaz.');
+    if (status === '415' || /mime type/i.test(err.message ?? '')) throw new AppError('invalid', 'Logo PNG veya JPEG olmalı.');
+    if (status === '403' || /row-level security|unauthorized/i.test(err.message ?? '')) throw new AppError('forbidden', 'Logo yükleme yetkiniz yok.');
+    throw toAppError(res.error);
+  }
+  return path;
+}
+
+/** Kullanılmayan (kaydedilmemiş veya değiştirilmiş) logoyu siler. Hata kullanıcıyı engellemez. */
+export async function removeBrandLogo(c: Client, path: string): Promise<void> {
+  try {
+    await c.storage.from(BRANDING_BUCKET).remove([path]);
+  } catch {
+    // Silinemeyen dosya yalnızca yer kaplar; tema etkilenmez
+  }
+}
+
+export async function signBrandLogoUrl(c: Client, path: string, expiresInSeconds = 3600): Promise<string> {
+  const { data, error } = await c.storage.from(BRANDING_BUCKET).createSignedUrl(path, expiresInSeconds);
+  if (error || !data?.signedUrl) throw toAppError(error ?? new Error('Logo bağlantısı alınamadı.'));
+  return data.signedUrl;
+}
+
 /** Gönderilmeden vazgeçilen yüklemeyi siler (mesaja bağlı dosya RLS ile silinemez). */
 export async function removePendingAttachment(c: Client, path: string): Promise<void> {
   await c.storage.from(ATTACHMENT_BUCKET).remove([path]);
@@ -792,6 +901,8 @@ export function subscribeCompanyChanges(
     onNotifications?: () => void;
     /** Yeni/silinen mesaj. Konuşma kimliği yalnızca hangi listenin yenileneceğine dair ipucudur. */
     onMessages?: (conversationId: string | null) => void;
+    /** Şirket teması değişti (başka bir yönetici kaydetti) */
+    onBranding?: () => void;
     onLive?: (status: LiveStatus) => void;
   },
   /** Aynı istemcide birden çok abonelik (ör. kabuk + mesaj ekranı) ayrı kanal adı kullanmalı */
@@ -824,6 +935,12 @@ export function subscribeCompanyChanges(
           const row = (p.new ?? p.old ?? {}) as { conversation_id?: string };
           onMessages(row.conversation_id ?? null);
         });
+      }
+      if (handlers.onBranding) {
+        const onBranding = handlers.onBranding;
+        ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'company_branding', filter: `company_id=eq.${companyId}` }, () =>
+          onBranding(),
+        );
       }
       channel = ch
         .on('system', {}, (p: { extension?: string; status?: string }) => {

@@ -33,3 +33,6 @@ coverage/
 
 .DS_Store
 Thumbs.db
+
+# Claude Code tasarım becerileri (üçüncü taraf; projeye ait değil, depoya girmez)
+.claude/skills/
