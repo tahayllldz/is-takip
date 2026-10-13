@@ -190,7 +190,14 @@ function MobileWidget({ id }: { id: WidgetId }) {
         <Card title={canSeeTeam ? 'Geciken işler (ekip)' : 'Geciken işlerim'}>
           {state(q) ??
             (list.length ? (
-              list.map((t) => <TaskRow key={t.id} task={t} tz={c.timezone} subtitle={`Sorumlu: ${c.nameOf(t.assignee_id)}`} />)
+              list.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  tz={c.timezone}
+                  subtitle={canSeeTeam ? `Sorumlu: ${c.nameOf(t.assignee_id)}` : `Veren: ${c.nameOf(t.created_by)}`}
+                />
+              ))
             ) : (
               <Empty title="Geciken iş yok" />
             ))}

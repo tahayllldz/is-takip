@@ -122,7 +122,11 @@ async function Widget({ id, s, myOpen }: { id: WidgetId; s: AppSession; myOpen: 
       list.sort((a, b) => compareTasksByUrgency(a, b, now));
       return (
         <Card title={canSeeTeam ? 'Geciken işler (ekip)' : 'Geciken işlerim'} actions={more('/gorevler?g=overdue')}>
-          {list.length ? <TaskList approvalOn={approvalOn} tasks={list} tz={s.timezone} nameOf={s.nameOf} showCreator /> : <EmptyState title="Geciken iş yok" />}
+          {list.length ? (
+            <TaskList approvalOn={approvalOn} tasks={list} tz={s.timezone} nameOf={s.nameOf} showAssignee={canSeeTeam} showCreator />
+          ) : (
+            <EmptyState title="Geciken iş yok" />
+          )}
         </Card>
       );
     }

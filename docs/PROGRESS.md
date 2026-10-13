@@ -27,11 +27,33 @@
 | Uç nokta anahtarsız/yanlış anahtarla 401 | curl | ✓ |
 | Testler: ortak 27, RLS 121 (gerçek Supabase'de 120 + 1 bilinçli atlama), uçtan uca 15, web derleme, istemci paketinde gizli anahtar yok | | ✓ |
 
+### Gerçek iPhone testi (Expo Go, USB internet paylaşımı) — 21:27–21:32
+Ayşe (çalışan) telefonda, Deniz (sahip, onaylayıcı) web'de. Sunucu tarafı her adımda veritabanından izlendi.
+
+| Adım | Kanıt | Sonuç |
+|---|---|---|
+| Telefonda onaylı görev "Tamamlandı" → "Onay bekliyor"; onaylayıcıya bildirim | Veritabanı (21:27:44) | ✓ |
+| Web'den açıklamalı düzeltme isteği → görev "Devam ediyor / Düzeltme istendi" | Veritabanı (21:28:33) | ✓ |
+| Telefon güncel durumu aldı ve görevi 26 sn sonra yeniden tamamladı → tekrar "Onay bekliyor", eski not temizlendi, ikinci onay isteği bildirimi | Veritabanı (21:28:59) | ✓ (notun ekranda göründüğü ayrıca ekran görüntüsüyle teyit edilmedi) |
+| Web'den onay → "Tamamlandı / Onaylandı"; görev telefonda açık işlerden çıktı | Veritabanı + telefon ekran görüntüsü | ✓ |
+| Mobil Bugün: düzen telefonda değiştirildi ve kaydedildi (Gecikenler, Bugünkü işlerim); "Düzen: Kendi düzeniniz" | Veritabanı + ekran görüntüsü | ✓ |
+| Profil → Push: "Kullanılamıyor: Expo Go push bildirimini desteklemiyor…" (sahte "açık" durumu yok); cihaz kaydı oluşmadı, kuyruğa kayıt düşmedi | Ekran görüntüsü + veritabanı | ✓ |
+
+Bu testte bulunan ve düzeltilen: "Geciken işlerim" bileşeni çalışana sorumlu olarak kendi adını gösteriyordu ("Sorumlu: Ayşe
+Demo"); artık çalışana "Veren", ekip görünümünde "Sorumlu" gösterilir (web + mobil, web'de iki rolle kontrol edildi).
+
 ### Doğrulanamayanlar
 - **Gerçek telefona push teslimi denenmedi.** Expo Go push'u desteklemiyor; geliştirme derlemesi (EAS) + iPhone için Apple
   Developer Program üyeliği (Android için Firebase/FCM) gerekiyor. Telefonda Profil ekranı bunu açıkça yazar.
+- Bildirime dokununca ilgili ekranın açılması ve kilit ekranı metni gerçek cihazda görülmedi (yukarıdaki nedenle).
 - Üretim tetikleyicisi (Supabase Database Webhook) kurulmadı; yerelde `pnpm push:dispatch` ile çalışır.
-- Mobilde onay kararı ve düzen düzenleme gerçek telefonda henüz denenmedi (mobil kod tarayıcıda denendi).
+- Android cihazda hiçbir aşama denenmedi. Telefonda onaylayıcı rolü (karar verme) denenmedi; web'de denendi.
+
+### Sıradaki somut adım
+1. Push teslimi için: Apple Developer Program üyeliği (veya Android için Firebase projesi) → `eas init` →
+   `eas build --profile development` → telefona kurulum → Profil'den aç → görev ata → kilit ekranında genel metin ve dokununca
+   görev ekranı açılıyor mu kontrol et.
+2. Pilot hazırlığı: Supabase Cloud (Frankfurt) projesi, web yayını, push için Database Webhook, gerçek şirket kaydı ve davetler.
 
 ## 2026-10-13 — Aşama 2 (İletişim) tamamlandı ve doğrulandı
 
