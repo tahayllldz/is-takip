@@ -1,4 +1,4 @@
-import { fetchNotifications, formatAgo, markNotificationsRead, toAppError, type AppNotification } from '@istakip/shared';
+import { fetchNotifications, formatAgo, markNotificationsRead, notificationTarget, toAppError, type AppNotification } from '@istakip/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
@@ -27,7 +27,9 @@ export default function NotificationsScreen() {
 
   function open(n: AppNotification) {
     if (!n.read_at) mark.mutate([n.id]);
-    if (n.entity_type === 'task' && n.entity_id) router.push(`/gorev/${n.entity_id}`);
+    const t = notificationTarget(n);
+    if (t?.kind === 'task') router.push(`/gorev/${t.taskId}`);
+    else if (t?.kind === 'conversation') router.push({ pathname: '/mesaj/[id]', params: { id: t.conversationId, ...(t.messageId ? { m: t.messageId } : {}) } });
   }
 
   if (q.isLoading) return <Loading />;
@@ -53,7 +55,7 @@ export default function NotificationsScreen() {
           </View>
         ) : null
       }
-      ListEmptyComponent={<Empty title="Bildirim yok" text="Size görev verildiğinde veya etiketlendiğinizde burada görünür." />}
+      ListEmptyComponent={<Empty title="Bildirim yok" text="Size görev verildiğinde veya bir görevde ya da mesajda etiketlendiğinizde burada görünür." />}
       renderItem={({ item: n }) => (
         <Pressable
           accessibilityRole="button"

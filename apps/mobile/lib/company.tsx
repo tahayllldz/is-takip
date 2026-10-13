@@ -87,6 +87,12 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         void qc.invalidateQueries({ queryKey: keys.notifications(companyId) });
         void qc.invalidateQueries({ queryKey: keys.unread(companyId) });
       },
+      // Mesaj olayı: sohbet listesi (okunmamış), açık sohbet ve etiketler yenilenir
+      onMessages: (conversationId) => {
+        void qc.invalidateQueries({ queryKey: keys.conversations(companyId) });
+        void qc.invalidateQueries({ queryKey: keys.mentions(companyId) });
+        void qc.invalidateQueries({ queryKey: conversationId ? keys.messages(conversationId) : ['messages'] });
+      },
       onLive: (s) => {
         setLive(s === 'live');
         // Akış hazır olunca (ilk bağlantı ve yeniden bağlanma) arada kaçırılanları al

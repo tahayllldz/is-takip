@@ -17,6 +17,18 @@
       "bundler": "metro",
       "output": "single"
     },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mesajlara fotoğraf eklemek için fotoğraflarınıza erişim gerekir.",
+          "cameraPermission": "Mesajlara fotoğraf çekip eklemek için kamera erişimi gerekir.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker"
+    ]
   }
 }

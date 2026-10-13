@@ -1,4 +1,4 @@
-import { countUnreadNotifications, toAppError } from '@istakip/shared';
+import { countUnreadNotifications, fetchConversationList, toAppError } from '@istakip/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
 import { ScrollView, Text, type ColorValue } from 'react-native';
@@ -20,6 +20,12 @@ export default function TabsLayout() {
     queryKey: keys.unread(c.companyId ?? '-'),
     queryFn: () => countUnreadNotifications(supabase, c.companyId!),
     enabled: Boolean(c.companyId),
+  });
+  const messagingOn = c.enabledModules.includes('messaging');
+  const conversationsQ = useQuery({
+    queryKey: keys.conversations(c.companyId ?? '-'),
+    queryFn: () => fetchConversationList(supabase, c.companyId!),
+    enabled: Boolean(c.companyId) && messagingOn,
   });
 
   if (c.loading) return <Loading />;
@@ -47,6 +53,7 @@ export default function TabsLayout() {
 
   const tasksOn = c.enabledModules.includes('tasks');
   const unread = unreadQ.data ?? 0;
+  const unreadMessages = messagingOn ? (conversationsQ.data ?? []).reduce((n, x) => n + x.unread_count, 0) : 0;
 
   return (
     <Tabs
@@ -64,6 +71,16 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="gorevler"
         options={{ title: 'Görevler', tabBarIcon: icon('☑'), href: tasksOn ? undefined : null, tabBarAccessibilityLabel: 'Görevler' }}
+      />
+      <Tabs.Screen
+        name="mesajlar"
+        options={{
+          title: 'Mesajlar',
+          tabBarIcon: icon('💬'),
+          href: messagingOn ? undefined : null,
+          tabBarBadge: unreadMessages > 0 ? (unreadMessages > 99 ? '99+' : unreadMessages) : undefined,
+          tabBarAccessibilityLabel: `Mesajlar, ${unreadMessages} okunmamış`,
+        }}
       />
       <Tabs.Screen
         name="bildirimler"

@@ -30,4 +30,8 @@ export const keys = {
   task: (id: string) => ['task', id] as const,
   notifications: (cid: string) => ['notifications', cid] as const,
   unread: (cid: string) => ['unread', cid] as const,
+  conversations: (cid: string) => ['conversations', cid] as const,
+  conversation: (id: string) => ['conversation', id] as const,
+  messages: (id: string) => ['messages', id] as const,
+  mentions: (cid: string) => ['mentions', cid] as const,
 };

@@ -50,6 +50,7 @@ function Gate() {
         <Stack.Protected guard={Boolean(session)}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="gorev/[id]" options={{ title: 'Görev' }} />
+          <Stack.Screen name="mesaj/[id]" options={{ title: 'Sohbet' }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="giris" options={{ headerShown: false }} />
