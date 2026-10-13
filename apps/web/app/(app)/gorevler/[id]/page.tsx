@@ -3,6 +3,7 @@ import {
   assignmentSteps,
   describeTaskEvent,
   fetchGroups,
+  fetchMessageRef,
   fetchTask,
   formatDate,
   formatDateTime,
@@ -29,7 +30,11 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   const { task, contributorIds, events, comments } = detail;
   const tasksOn = moduleOn(s, 'tasks');
 
-  const groups = await fetchGroups(s.supabase, s.companyId);
+  const messagingOn = moduleOn(s, 'messaging');
+  const [groups, sourceMessage] = await Promise.all([
+    fetchGroups(s.supabase, s.companyId),
+    task.source_message_id && messagingOn ? fetchMessageRef(s.supabase, task.source_message_id).catch(() => null) : Promise.resolve(null),
+  ]);
   const group = groups.find((g) => g.id === task.group_id);
   const isAssignee = task.assignee_id === s.userId;
   const isCreator = task.created_by === s.userId;
@@ -172,6 +177,24 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
                 <dt className="text-muted">Grup</dt>
                 <dd>{group ? <Link className="text-brand underline" href={`/gruplar/${group.id}`}>{group.name}</Link> : 'Yok'}</dd>
               </div>
+              {task.source_message_id ? (
+                <div>
+                  <dt className="text-muted">Kaynak mesaj</dt>
+                  <dd>
+                    {!messagingOn ? (
+                      'İletişim modülü kapalı'
+                    ) : !sourceMessage ? (
+                      'Mesajı görme erişiminiz yok'
+                    ) : sourceMessage.deleted_at ? (
+                      'Mesaj silindi'
+                    ) : (
+                      <Link className="text-brand underline" href={`/mesajlar/${sourceMessage.conversation_id}?m=${sourceMessage.id}`}>
+                        “{sourceMessage.body.length > 80 ? `${sourceMessage.body.slice(0, 80)}…` : sourceMessage.body || 'Dosya mesajı'}”
+                      </Link>
+                    )}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-muted">Son tarih</dt>
                 <dd>{task.due_at ? (task.due_all_day ? `${formatDate(task.due_at, s.timezone)} (gün sonu)` : formatDateTime(task.due_at, s.timezone)) : 'Yok'}</dd>

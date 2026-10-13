@@ -1,17 +1,24 @@
-import { ROLE_LABELS, countUnreadNotifications, menuFor, type PermissionKey } from '@istakip/shared';
+import { ROLE_LABELS, countUnreadNotifications, fetchConversationList, menuFor, type PermissionKey } from '@istakip/shared';
 import type { ReactNode } from 'react';
 import { CompanySwitcher, LiveRefresh, NavLinks, type NavItem } from '@/components/shell';
-import { requireSession } from '@/lib/session';
+import { moduleOn, requireSession } from '@/lib/session';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const s = await requireSession();
-  const unread = await countUnreadNotifications(s.supabase, s.companyId).catch(() => 0);
+  const [unread, unreadMessages] = await Promise.all([
+    countUnreadNotifications(s.supabase, s.companyId).catch(() => 0),
+    moduleOn(s, 'messaging')
+      ? fetchConversationList(s.supabase, s.companyId)
+          .then((list) => list.reduce((sum, c) => sum + c.unread_count, 0))
+          .catch(() => 0)
+      : Promise.resolve(0),
+  ]);
 
   // Menü, açık modüllerden ve kullanıcının izinlerinden türetilir. Kapalı modülün menüsü yoktur.
   const items: NavItem[] = menuFor(s.enabledModules)
     .filter((m) => m.key !== 'notifications')
     .filter((m) => !m.requires || s.can(m.requires as PermissionKey))
-    .map((m) => ({ key: m.key, label: m.label, href: m.webPath }));
+    .map((m) => ({ key: m.key, label: m.label, href: m.webPath, badge: m.key === 'messages' ? unreadMessages : undefined }));
 
   const me = s.members.find((m) => m.user_id === s.userId);
 

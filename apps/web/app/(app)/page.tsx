@@ -2,13 +2,53 @@ import {
   TASK_STATUSES,
   TASK_STATUS_META,
   compareTasksByUrgency,
+  fetchMyMentions,
   fetchTaskSummary,
   fetchTasks,
+  formatAgo,
   isTodayTask,
 } from '@istakip/shared';
+import Link from 'next/link';
 import { TaskList } from '@/components/tasks/task-list';
 import { Alert, ButtonLink, Card, EmptyState, PageHeader } from '@/components/ui';
-import { moduleOn, requireSession } from '@/lib/session';
+import { moduleOn, requireSession, type AppSession } from '@/lib/session';
+
+/** Etiketlendiğim mesajlar (İletişim modülü). Yalnızca görebildiği konuşmalardaki etiketler (RLS). */
+async function MentionsCard({ s }: { s: AppSession }) {
+  const mentions = await fetchMyMentions(s.supabase, s.companyId, 5).catch(() => []);
+  const now = new Date();
+  return (
+    <Card title="Etiketlendiğim mesajlar" actions={<Link className="font-semibold text-brand underline" href="/mesajlar">Mesajlar</Link>}>
+      {mentions.length ? (
+        <ul className="divide-y divide-line">
+          {mentions.map((m) => (
+            <li key={m.message_id}>
+              <Link href={`/mesajlar/${m.conversation_id}?m=${m.message_id}`} className="block py-2 hover:underline">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="font-semibold">
+                    {!m.is_read ? (
+                      <>
+                        <span aria-hidden="true" className="mr-1 text-brand">●</span>
+                        <span className="sr-only">Okunmamış: </span>
+                      </>
+                    ) : null}
+                    {s.nameOf(m.author_id)} · {m.conversation_title}
+                  </span>
+                  <time dateTime={m.created_at} className="shrink-0 text-sm text-muted">
+                    {formatAgo(m.created_at, now)}
+                  </time>
+                </span>
+                <span className="line-clamp-2 break-words text-muted">{m.body || '📎 Dosya'}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState title="Sizi etiketleyen mesaj yok">Biri sizi bir mesajda @ ile etiketlediğinde burada görünür.</EmptyState>
+      )}
+    </Card>
+  );
+}
 
 export const metadata = { title: 'Ana sayfa' };
 
@@ -23,11 +63,18 @@ export default async function HomePage() {
   const me = s.members.find((m) => m.user_id === s.userId);
   const firstName = (me?.profile.full_name || '').split(' ')[0];
 
+  const messagingOn = moduleOn(s, 'messaging');
   if (!moduleOn(s, 'tasks')) {
     return (
       <>
         <PageHeader title={`Merhaba${firstName ? ` ${firstName}` : ''}`} />
-        <Alert tone="info">Şirketinizde açık bir iş modülü bulunmuyor.</Alert>
+        {messagingOn ? (
+          <div className="grid gap-6 xl:grid-cols-2">
+            <MentionsCard s={s} />
+          </div>
+        ) : (
+          <Alert tone="info">Şirketinizde açık bir iş modülü bulunmuyor.</Alert>
+        )}
       </>
     );
   }
@@ -68,6 +115,8 @@ export default async function HomePage() {
             <EmptyState title="Geciken iş yok" />
           )}
         </Card>
+
+        {messagingOn ? <MentionsCard s={s} /> : null}
 
         {created.length || s.can('tasks.assign') || s.scopeGroupIds.length ? (
           <Card title="Verdiğim işler" actions={<a className="font-semibold text-brand underline" href="/gorevler?g=created">Tümü</a>}>

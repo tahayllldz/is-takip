@@ -143,6 +143,11 @@ describe('hata eşleme', () => {
     expect(toAppError({ code: '42501', message: 'permission denied' }).message).toBe('Bu işlem için yetkiniz yok.');
     expect(toAppError(new TypeError('Failed to fetch')).code).toBe('network');
     expect(toAppError({ message: 'garip' }).code).toBe('unknown');
+    // Ağ geçidi ayakta, arkadaki servis kapalı (bakım/yeniden başlama)
+    expect(toAppError({ message: 'An invalid response was received from the upstream server' }).message).toMatch(/ulaşılamıyor/);
+    expect(toAppError({ message: 'x' }, 503).code).toBe('network');
+    // Veritabanı iş kuralı hatası (400) sunucu kesintisi sayılmaz
+    expect(toAppError({ message: 'Mesaj en fazla 4000 karakter olabilir.', hint: 'invalid' }, 400).code).toBe('invalid');
   });
 });
 

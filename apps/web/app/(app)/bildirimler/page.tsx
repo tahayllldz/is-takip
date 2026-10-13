@@ -1,4 +1,4 @@
-import { fetchNotifications, formatAgo, formatDateTime } from '@istakip/shared';
+import { fetchNotifications, formatAgo, formatDateTime, notificationTarget, type AppNotification } from '@istakip/shared';
 import Link from 'next/link';
 import { markReadAction } from '@/app/(app)/actions';
 import { ActionButton } from '@/components/action-button';
@@ -7,11 +7,12 @@ import { requireSession } from '@/lib/session';
 
 export const metadata = { title: 'Bildirimler' };
 
-function hrefFor(entityType: string | null, entityId: string | null): string | null {
-  if (!entityId) return null;
-  if (entityType === 'task') return `/gorevler/${entityId}`;
-  if (entityType === 'group') return `/gruplar/${entityId}`;
-  return null;
+function hrefFor(n: AppNotification): string | null {
+  const t = notificationTarget(n);
+  if (!t) return null;
+  if (t.kind === 'task') return `/gorevler/${t.taskId}`;
+  if (t.kind === 'group') return `/gruplar/${t.groupId}`;
+  return `/mesajlar/${t.conversationId}${t.messageId ? `?m=${t.messageId}` : ''}`;
 }
 
 export default async function NotificationsPage() {
@@ -28,11 +29,11 @@ export default async function NotificationsPage() {
         actions={unread ? <ActionButton action={markReadAction} fields={{}} label="Tümünü okundu say" small={false} /> : undefined}
       />
       {list.length === 0 ? (
-        <EmptyState title="Bildirim yok">Size görev verildiğinde, etiketlendiğinizde veya gruba eklendiğinizde burada görünür.</EmptyState>
+        <EmptyState title="Bildirim yok">Size görev verildiğinde, bir görevde veya mesajda etiketlendiğinizde ya da gruba eklendiğinizde burada görünür.</EmptyState>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {list.map((n) => {
-            const href = hrefFor(n.entity_type, n.entity_id);
+            const href = hrefFor(n);
             const content = (
               <>
                 <p className="font-semibold">

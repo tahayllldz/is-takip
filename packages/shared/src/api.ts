@@ -38,6 +38,7 @@ export type Client = SupabaseClient<any, any, any>;
 interface Result<T> {
   data: T | null;
   error: unknown;
+  status?: number;
 }
 
 async function run<T>(p: PromiseLike<Result<T>>): Promise<T> {
@@ -47,7 +48,7 @@ async function run<T>(p: PromiseLike<Result<T>>): Promise<T> {
   } catch (e) {
     throw toAppError(e);
   }
-  if (res.error) throw toAppError(res.error);
+  if (res.error) throw toAppError(res.error, res.status);
   return res.data as T;
 }
 
@@ -386,6 +387,24 @@ export async function fetchTaskSummary(c: Client, companyId: string, groupId?: s
 // Bildirimler ve işlem geçmişi
 // ---------------------------------------------------------------------
 
+export type NotificationTarget =
+  | { kind: 'task'; taskId: string }
+  | { kind: 'group'; groupId: string }
+  | { kind: 'conversation'; conversationId: string; messageId: string | null };
+
+/** Bildirime tıklanınca gidilecek kayıt (web ve mobil aynı kuralı kullanır). */
+export function notificationTarget(n: Pick<AppNotification, 'entity_type' | 'entity_id' | 'data'>): NotificationTarget | null {
+  if (!n.entity_id) return null;
+  if (n.entity_type === 'task') return { kind: 'task', taskId: n.entity_id };
+  if (n.entity_type === 'group') return { kind: 'group', groupId: n.entity_id };
+  if (n.entity_type === 'message') {
+    const conv = typeof n.data?.conversation_id === 'string' ? n.data.conversation_id : null;
+    return conv ? { kind: 'conversation', conversationId: conv, messageId: n.entity_id } : null;
+  }
+  if (n.entity_type === 'conversation') return { kind: 'conversation', conversationId: n.entity_id, messageId: null };
+  return null;
+}
+
 export async function fetchNotifications(c: Client, companyId: string, opts: { unreadOnly?: boolean; limit?: number } = {}): Promise<AppNotification[]> {
   let q = c.from('notifications').select('*').eq('company_id', companyId);
   if (opts.unreadOnly) q = q.is('read_at', null);
@@ -473,6 +492,23 @@ export async function fetchMessages(
   if (opts.before) q = q.lt('created_at', opts.before);
   const rows = await run<Message[]>(q.order('created_at', { ascending: false }).limit(opts.limit ?? MESSAGE_PAGE_SIZE));
   return rows.reverse();
+}
+
+/** Grubun sohbeti (RLS: yalnızca grup üyesine döner) */
+export async function fetchGroupConversationId(c: Client, groupId: string): Promise<string | null> {
+  const rows = await run<{ id: string }[]>(c.from('conversations').select('id').eq('group_id', groupId).limit(1));
+  return rows[0]?.id ?? null;
+}
+
+/** Görevin kaynak mesajı (RLS: konuşmayı göremeyen için null döner) */
+export async function fetchMessageRef(
+  c: Client,
+  messageId: string,
+): Promise<{ id: string; conversation_id: string; body: string; deleted_at: string | null } | null> {
+  const rows = await run<{ id: string; conversation_id: string; body: string; deleted_at: string | null }[]>(
+    c.from('messages').select('id, conversation_id, body, deleted_at').eq('id', messageId).limit(1),
+  );
+  return rows[0] ?? null;
 }
 
 /** Mesajlardan oluşturulmuş görevler (RLS: yalnızca görebildikleri) */
@@ -664,6 +700,8 @@ export function subscribeCompanyChanges(
     onMessages?: (conversationId: string | null) => void;
     onLive?: (status: LiveStatus) => void;
   },
+  /** Aynı istemcide birden çok abonelik (ör. kabuk + mesaj ekranı) ayrı kanal adı kullanmalı */
+  channelName = 'app',
 ): () => void {
   let channel: RealtimeChannel | null = null;
   let stopped = false;
@@ -675,7 +713,17 @@ export function subscribeCompanyChanges(
     .catch(() => undefined)
     .then(() => {
       if (stopped) return;
-      let ch = c.channel(`company:${companyId}:${userId}`);
+      let ch = c.channel(`${channelName}:${companyId}:${userId}`);
+      if (handlers.onTasks) {
+        const onTasks = handlers.onTasks;
+        ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${companyId}` }, () => onTasks());
+      }
+      if (handlers.onNotifications) {
+        const onNotifications = handlers.onNotifications;
+        ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, () =>
+          onNotifications(),
+        );
+      }
       if (handlers.onMessages) {
         const onMessages = handlers.onMessages;
         ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `company_id=eq.${companyId}` }, (p) => {
@@ -684,12 +732,6 @@ export function subscribeCompanyChanges(
         });
       }
       channel = ch
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${companyId}` }, () =>
-          handlers.onTasks?.(),
-        )
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, () =>
-          handlers.onNotifications?.(),
-        )
         .on('system', {}, (p: { extension?: string; status?: string }) => {
           if (p.extension === 'postgres_changes') handlers.onLive?.(p.status === 'ok' ? 'live' : 'offline');
         })

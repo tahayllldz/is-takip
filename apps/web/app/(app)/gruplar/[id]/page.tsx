@@ -1,4 +1,4 @@
-import { GROUP_ROLE_LABELS, compareTasksByUrgency, fetchGroups, fetchTasks } from '@istakip/shared';
+import { GROUP_ROLE_LABELS, compareTasksByUrgency, fetchGroupConversationId, fetchGroups, fetchTasks } from '@istakip/shared';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { archiveGroupAction, removeGroupMemberAction, setGroupRoleAction } from '@/app/(app)/actions';
@@ -19,7 +19,10 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
 
   const canManage = s.can('groups.manage', group.id);
   const isMember = group.members.some((m) => m.user_id === s.userId);
-  const tasks = moduleOn(s, 'tasks') ? await fetchTasks(s.supabase, s.companyId, { scope: 'group', groupId: group.id, userId: s.userId, status: 'open' }) : [];
+  const [tasks, conversationId] = await Promise.all([
+    moduleOn(s, 'tasks') ? fetchTasks(s.supabase, s.companyId, { scope: 'group', groupId: group.id, userId: s.userId, status: 'open' }) : Promise.resolve([]),
+    moduleOn(s, 'messaging') && isMember ? fetchGroupConversationId(s.supabase, group.id).catch(() => null) : Promise.resolve(null),
+  ]);
   tasks.sort((a, b) => compareTasksByUrgency(a, b));
   const memberIds = new Set(group.members.map((m) => m.user_id));
   const candidates = s.members
@@ -38,9 +41,16 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
         title={group.name}
         description={group.description || undefined}
         actions={
-          moduleOn(s, 'tasks') && (s.can('tasks.assign', group.id) || isMember) ? (
-            <ButtonLink href={`/gorevler/yeni?grup=${group.id}`}>+ Bu gruba görev</ButtonLink>
-          ) : undefined
+          <>
+            {conversationId ? (
+              <ButtonLink href={`/mesajlar/${conversationId}`} variant="secondary">
+                Grup sohbeti
+              </ButtonLink>
+            ) : null}
+            {moduleOn(s, 'tasks') && (s.can('tasks.assign', group.id) || isMember) ? (
+              <ButtonLink href={`/gorevler/yeni?grup=${group.id}`}>+ Bu gruba görev</ButtonLink>
+            ) : null}
+          </>
         }
       />
       <div className="grid gap-6 xl:grid-cols-3">

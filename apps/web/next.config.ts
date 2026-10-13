@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     root: monorepoRoot,
   },
   outputFileTracingRoot: monorepoRoot,
+  // Yalnızca geliştirme sunucusu: localhost dışındaki yerel adreslerden (ikinci kullanıcı sekmesi,
+  // aynı ağdaki telefon) açılan sayfaların geliştirme dosyalarına erişebilmesi için
+  allowedDevOrigins: ['127.0.0.1', '192.168.*.*', '172.20.10.*', '10.*.*.*'],
   poweredByHeader: false,
   async headers() {
     return [

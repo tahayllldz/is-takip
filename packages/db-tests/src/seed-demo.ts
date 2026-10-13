@@ -17,6 +17,10 @@ import {
   createGroup,
   createInvitation,
   createTask,
+  createTaskFromMessage,
+  fetchConversationList,
+  getOrCreateDirectConversation,
+  sendMessage,
   setTaskStatus,
   type Client,
 } from '@istakip/shared';
@@ -111,6 +115,20 @@ async function main() {
   await setTaskStatus(clients.can, { taskId: t4.id, status: 'on_hold', reason: 'Örnek: müşteriden onay bekleniyor' });
   await setTaskStatus(clients.ayse, { taskId: t6.id, status: 'done' });
   await addTaskComment(clients.sahip, { taskId: t1.id, body: 'Fotoğrafları da eklemeyi unutma.', mentionIds: [ids.ayse], clientRequestId: randomUUID() });
+
+  // Örnek mesajlar (sentetik): grup sohbeti, @etiket, mesajdan görev, birebir
+  const convs = await fetchConversationList(clients.mehmet, companyId);
+  const servisConv = convs.find((c) => c.group_id === servis)!.id;
+  const msg = (by: Key, conversationId: string, body: string, mention: Key[] = []) =>
+    sendMessage(clients[by], { conversationId, body, clientRequestId: randomUUID(), mentionIds: mention.map((k) => ids[k]) });
+  await msg('mehmet', servisConv, 'Günaydın ekip. Bugün iki örnek kurulum var, öğleden sonra depo sayımı.');
+  await msg('yonetici', servisConv, '@Ayşe Demo örnek kurulum formunun fotoğraflarını buraya da ekler misin?', ['ayse']);
+  const alarm = await msg('ayse', servisConv, 'Örnek cihazda kalibrasyon uyarısı görünüyor, yarın tekrar bakılmalı.');
+  await createTaskFromMessage(clients.mehmet, { messageId: alarm.id, title: 'Örnek cihaz kalibrasyon uyarısını kontrol et', assigneeId: ids.mehmet, clientRequestId: randomUUID(), dueDate: d(1) });
+  await msg('mehmet', servisConv, '@Ayşe Demo yarın ilk iş ben bakarım, görev olarak ekledim.', ['ayse']);
+  const dm = await getOrCreateDirectConversation(clients.elif, companyId, ids.can);
+  await msg('elif', dm, 'Can, örnek sipariş listesini öğleden sonra paylaşır mısın?');
+  await msg('can', dm, 'Tamam, 15:00 gibi gönderirim.');
 
   console.log('Demo şirketi oluşturuldu: Örnek Medikal Ltd. (DEMO)');
   console.log('Giriş e-postaları: ' + PEOPLE.map((p) => p.email).join(', '));

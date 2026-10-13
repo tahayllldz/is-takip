@@ -34,7 +34,10 @@ interface PgLikeError {
   name?: string;
 }
 
-export function toAppError(e: unknown): AppError {
+export const UNAVAILABLE_ERROR_MESSAGE = 'Sunucuya şu anda ulaşılamıyor. Biraz sonra tekrar deneyin.';
+
+/** @param httpStatus PostgREST/Storage yanıtının HTTP durumu (biliniyorsa) */
+export function toAppError(e: unknown, httpStatus?: number): AppError {
   if (e instanceof AppError) return e;
   const err = (e ?? {}) as PgLikeError;
   const hint = err.hint ?? undefined;
@@ -46,6 +49,11 @@ export function toAppError(e: unknown): AppError {
   const msg = String(err.message ?? '');
   if (err.name === 'TypeError' || /fetch failed|Failed to fetch|Network request failed|NetworkError/i.test(msg)) {
     return new AppError('network', NETWORK_ERROR_MESSAGE);
+  }
+  // Ağ geçidi ayakta ama arkadaki servis yanıt vermiyor (bakım, yeniden başlama)
+  const status = httpStatus ?? err.status;
+  if (status === 502 || status === 503 || status === 504 || /upstream|ring-balancer|name resolution failed|Bad Gateway|Service Unavailable/i.test(msg)) {
+    return new AppError('network', UNAVAILABLE_ERROR_MESSAGE);
   }
   return new AppError('unknown', UNKNOWN_ERROR_MESSAGE);
 }

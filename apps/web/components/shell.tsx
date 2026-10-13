@@ -14,6 +14,8 @@ export interface NavItem {
   key: string;
   label: string;
   href: string;
+  /** Okunmamış sayısı (ör. Mesajlar) */
+  badge?: number;
 }
 
 export function NavLinks({ items }: { items: NavItem[] }) {
@@ -32,6 +34,12 @@ export function NavLinks({ items }: { items: NavItem[] }) {
               }`}
             >
               {item.label}
+              {item.badge ? (
+                <span className="ml-2 rounded-full bg-danger px-2 text-sm font-bold text-white">
+                  {item.badge > 99 ? '99+' : item.badge}
+                  <span className="sr-only"> okunmamış</span>
+                </span>
+              ) : null}
             </Link>
           </li>
         );
@@ -102,6 +110,8 @@ export function LiveRefresh({ companyId, userId, initialUnread }: { companyId: s
         void refreshUnread();
         refresh();
       },
+      // Menüdeki okunmamış mesaj sayısı sunucuda hesaplanır; mesaj gelince yenilenir
+      onMessages: refresh,
       onLive: (s) => {
         setStatus(s);
         // Akış hazır olunca (ilk bağlantı ve yeniden bağlanma) arada kaçırılanları al
