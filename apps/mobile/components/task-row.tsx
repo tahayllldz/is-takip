@@ -1,9 +1,11 @@
 import type { Task } from '@istakip/shared';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
-import { DueBadge, PriorityBadge, StatusBadge, colors, s } from './ui';
+import { useCompany } from '@/lib/company';
+import { ApprovalBadge, DueBadge, PriorityBadge, StatusBadge, colors, s } from './ui';
 
 export function TaskRow({ task, tz, subtitle }: { task: Task; tz: string; subtitle?: string }) {
+  const approvalOn = useCompany().enabledModules.includes('task_approval');
   return (
     <Pressable
       accessibilityRole="button"
@@ -26,6 +28,7 @@ export function TaskRow({ task, tz, subtitle }: { task: Task; tz: string; subtit
         <StatusBadge status={task.status} />
         <PriorityBadge priority={task.priority} />
         <DueBadge task={task} tz={tz} />
+        {approvalOn && task.approval_status ? <ApprovalBadge status={task.approval_status} /> : null}
       </View>
     </Pressable>
   );

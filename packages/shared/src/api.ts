@@ -31,6 +31,7 @@ import type {
   TaskSummaryRow,
 } from './types';
 import type { TaskPriority } from './tasks';
+import type { DashboardPlatform } from './dashboard';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Client = SupabaseClient<any, any, any>;
@@ -459,6 +460,55 @@ export async function markNotificationsRead(c: Client, ids?: string[]): Promise<
 
 export async function fetchAuditLog(c: Client, companyId: string, limit = 100): Promise<AuditEntry[]> {
   return run(c.from('audit_log').select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(limit));
+}
+
+// ---------------------------------------------------------------------
+// Ana sayfa düzeni
+// ---------------------------------------------------------------------
+
+export async function fetchDashboardLayouts(
+  c: Client,
+  companyId: string,
+  userId: string,
+  role: Role,
+  platform: DashboardPlatform,
+): Promise<{ personal: string[] | null; roleDefault: string[] | null }> {
+  const [mine, defaults] = await Promise.all([
+    run<{ widgets: string[] }[]>(
+      c.from('dashboard_user_layouts').select('widgets').eq('company_id', companyId).eq('user_id', userId).eq('platform', platform).limit(1),
+    ),
+    run<{ widgets: string[] }[]>(
+      c.from('dashboard_role_defaults').select('widgets').eq('company_id', companyId).eq('role', role).eq('platform', platform).limit(1),
+    ),
+  ]);
+  return { personal: mine[0]?.widgets ?? null, roleDefault: defaults[0]?.widgets ?? null };
+}
+
+export async function saveMyDashboard(c: Client, companyId: string, platform: DashboardPlatform, widgets: string[]): Promise<string[]> {
+  return run(c.rpc('save_my_dashboard', { p_company: companyId, p_platform: platform, p_widgets: widgets }));
+}
+
+export async function resetMyDashboard(c: Client, companyId: string, platform: DashboardPlatform): Promise<void> {
+  await run(c.rpc('reset_my_dashboard', { p_company: companyId, p_platform: platform }));
+}
+
+export interface DashboardRoleDefault {
+  role: Role;
+  platform: DashboardPlatform;
+  widgets: string[];
+  updated_at: string;
+}
+
+export async function fetchDashboardRoleDefaults(c: Client, companyId: string): Promise<DashboardRoleDefault[]> {
+  return run(c.from('dashboard_role_defaults').select('role, platform, widgets, updated_at').eq('company_id', companyId));
+}
+
+export async function saveDashboardDefault(c: Client, companyId: string, role: Role, platform: DashboardPlatform, widgets: string[]): Promise<string[]> {
+  return run(c.rpc('save_dashboard_default', { p_company: companyId, p_role: role, p_platform: platform, p_widgets: widgets }));
+}
+
+export async function resetDashboardDefault(c: Client, companyId: string, role: Role, platform: DashboardPlatform): Promise<void> {
+  await run(c.rpc('reset_dashboard_default', { p_company: companyId, p_role: role, p_platform: platform }));
 }
 
 // ---------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addableWidgets,
   attachmentPath,
   attachmentProblem,
   checkModuleToggle,
@@ -10,8 +11,12 @@ import {
   isOverdue,
   isTodayTask,
   localDateKey,
+  layoutToSave,
   menuFor,
+  moveItem,
+  moveTo,
   overdueDays,
+  resolveDashboard,
   safeStorageFileName,
   splitMentions,
   statusChangeSchema,
@@ -177,5 +182,42 @@ describe('mesaj ekleri ve etiketler', () => {
     ]);
     expect(parts.filter((p) => p.userId).map((p) => p.userId)).toEqual(['a', 'm']);
     expect(parts.map((p) => p.text).join('')).toBe('@Ayşe Demo ve @Mehmet bakar mısınız? @Can');
+  });
+});
+
+describe('ana sayfa düzeni', () => {
+  const all = (): boolean => true;
+  const noTeam = (w: { requires?: string }) => !w.requires;
+  const mods = ['tasks', 'messaging', 'task_approval'] as const;
+
+  it('kişisel düzen → rol varsayılanı → yerleşik sırasıyla çözülür', () => {
+    expect(resolveDashboard({ personal: ['mentions', 'my_today'], roleDefault: ['overdue'], role: 'employee', platform: 'web', enabledModules: [...mods], canUse: all })).toMatchObject({
+      widgets: ['mentions', 'my_today'],
+      source: 'personal',
+    });
+    expect(resolveDashboard({ personal: null, roleDefault: ['overdue'], role: 'employee', platform: 'web', enabledModules: [...mods], canUse: all }).source).toBe('role_default');
+    const b = resolveDashboard({ personal: null, roleDefault: null, role: 'employee', platform: 'mobile', enabledModules: [...mods], canUse: all });
+    expect(b.source).toBe('builtin');
+    expect(b.widgets[0]).toBe('my_today');
+  });
+
+  it('kapalı modülün bileşeni gizlenir ama kaydedilecek listede kalır; bilinmeyen ve tekrar eden kimlikler atılır', () => {
+    const r = resolveDashboard({ personal: ['mentions', 'my_today', 'yok', 'my_today'], roleDefault: null, role: 'employee', platform: 'web', enabledModules: ['tasks'], canUse: all });
+    expect(r.widgets).toEqual(['my_today']);
+    expect(r.hidden).toEqual(['mentions']);
+    expect(layoutToSave(['my_today'], r.hidden)).toEqual(['my_today', 'mentions']);
+  });
+
+  it('izin gerektiren bileşen izni olmayana gösterilmez ve eklenebilecekler arasında çıkmaz', () => {
+    const r = resolveDashboard({ personal: ['team_summary', 'my_today'], roleDefault: null, role: 'employee', platform: 'web', enabledModules: [...mods], canUse: noTeam });
+    expect(r.widgets).toEqual(['my_today']);
+    expect(addableWidgets(r.widgets, [...mods], noTeam).map((w) => w.id)).not.toContain('team_summary');
+    expect(addableWidgets(r.widgets, ['tasks'], all).map((w) => w.id)).not.toContain('mentions');
+  });
+
+  it('yukarı/aşağı ve sürükle-bırak taşıma', () => {
+    expect(moveItem(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b']);
+    expect(moveItem(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c']);
+    expect(moveTo(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
   });
 });

@@ -1,12 +1,25 @@
 import {
+  BUILTIN_DASHBOARDS,
+  DASHBOARD_PLATFORMS,
+  DASHBOARD_PLATFORM_LABELS,
   GROUP_MANAGER_PERMISSIONS,
   MODULES,
   PERMISSIONS,
+  ROLES,
+  ROLE_LABELS,
   ROLE_PERMISSIONS,
+  WIDGETS,
+  addableWidgets,
+  fetchDashboardRoleDefaults,
   fetchModuleStates,
+  resolveDashboard,
+  type DashboardPlatform,
   type ModuleId,
+  type Role,
+  type WidgetDef,
 } from '@istakip/shared';
 import Link from 'next/link';
+import { DashboardEditor } from '@/components/dashboard-editor';
 import { CompanyForm, ModuleToggle } from '@/components/settings-forms';
 import { Badge, Card, PageHeader } from '@/components/ui';
 import { requireSession } from '@/lib/session';
@@ -26,8 +39,8 @@ const no = (
   </span>
 );
 
-export default async function SettingsPage() {
-  const s = await requireSession();
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ varsayilan?: string }> }) {
+  const [s, sp] = await Promise.all([requireSession(), searchParams]);
   const states = s.can('modules.manage') ? await fetchModuleStates(s.supabase, s.companyId) : [];
   const has = (role: 'owner' | 'admin' | 'employee', key: string) => (ROLE_PERMISSIONS[role] as readonly string[]).includes(key);
 
@@ -124,6 +137,8 @@ export default async function SettingsPage() {
           </p>
         </Card>
 
+        {s.can('dashboard.manage_defaults') ? <DashboardDefaults s={s} selected={sp.varsayilan} /> : null}
+
         {s.can('audit.view') ? (
           <Card title="İşlem geçmişi">
             <p className="mb-3 text-muted">Davet, rol, üyelik, grup ve modül değişikliklerinin kaydı.</p>
@@ -134,5 +149,62 @@ export default async function SettingsPage() {
         ) : null}
       </div>
     </>
+  );
+}
+
+/** Rol ve platform başına varsayılan ana sayfa (kendi düzenini kaydetmemiş kişilere uygulanır). */
+async function DashboardDefaults({ s, selected }: { s: Awaited<ReturnType<typeof requireSession>>; selected?: string }) {
+  const defaults = await fetchDashboardRoleDefaults(s.supabase, s.companyId);
+  const [roleRaw, platformRaw] = (selected ?? 'employee-web').split('-');
+  const role: Role = (ROLES as readonly string[]).includes(roleRaw ?? '') ? (roleRaw as Role) : 'employee';
+  const platform: DashboardPlatform = (DASHBOARD_PLATFORMS as readonly string[]).includes(platformRaw ?? '') ? (platformRaw as DashboardPlatform) : 'web';
+  const current = defaults.find((d) => d.role === role && d.platform === platform);
+  // Rolün görebileceği bileşenler: izin gerektirenler yalnızca o role verilmişse
+  const roleCanUse = (w: WidgetDef) => !w.requires || role === 'owner' || (ROLE_PERMISSIONS[role] as readonly string[]).includes(w.requires);
+  const dash = resolveDashboard({ personal: null, roleDefault: current?.widgets ?? null, role, platform, enabledModules: s.enabledModules, canUse: roleCanUse });
+  const item = (id: keyof typeof WIDGETS) => ({ id, title: WIDGETS[id].title, description: WIDGETS[id].description });
+  return (
+    <Card title="Ana sayfa varsayılanları">
+      <p className="mb-3 text-muted">
+        Kendi düzenini kaydetmemiş kişiler, rolüne ve kullandığı yere (web/mobil) göre bu düzeni görür. Düzen yalnızca görünümü belirler; kimin
+        neyi göreceği yetkilere bağlıdır.
+      </p>
+      <nav aria-label="Rol ve platform" className="mb-4 flex flex-wrap gap-2">
+        {ROLES.flatMap((r) =>
+          DASHBOARD_PLATFORMS.map((p) => {
+            const key = `${r}-${p}`;
+            const active = r === role && p === platform;
+            const custom = defaults.some((d) => d.role === r && d.platform === p);
+            return (
+              <Link
+                key={key}
+                href={`/ayarlar?varsayilan=${key}#varsayilan`}
+                aria-current={active ? 'page' : undefined}
+                className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                {ROLE_LABELS[r]} · {DASHBOARD_PLATFORM_LABELS[p]}
+                {custom ? <span className="sr-only"> (şirkete özel)</span> : null}
+                {custom ? <span aria-hidden="true"> ●</span> : null}
+              </Link>
+            );
+          }),
+        )}
+      </nav>
+      <div id="varsayilan">
+        <DashboardEditor
+          key={`${role}-${platform}`}
+          mode="default"
+          role={role}
+          platform={platform}
+          source={current ? 'role_default' : 'builtin'}
+          initial={dash.widgets.map(item)}
+          hidden={dash.hidden}
+          available={addableWidgets(dash.widgets, s.enabledModules, roleCanUse).map((w) => item(w.id))}
+        />
+        <p className="mt-2 text-sm text-muted">
+          {current ? `Şirkete özel düzen (${ROLE_LABELS[role]}, ${DASHBOARD_PLATFORM_LABELS[platform]}).` : `Standart düzen kullanılıyor: ${BUILTIN_DASHBOARDS[role][platform].map((id) => WIDGETS[id].title).join(', ')}.`}
+        </p>
+      </div>
+    </Card>
   );
 }

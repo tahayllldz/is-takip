@@ -3,10 +3,12 @@
  * en az 48pt dokunma alanı, ekran okuyucu etiketleri, durumlar metin + simgeyle.
  */
 import {
+  TASK_APPROVAL_META,
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   dueLabel,
   dueState,
+  type TaskApprovalStatus,
   type TaskPriority,
   type TaskStatus,
   type TaskTiming,
@@ -53,6 +55,11 @@ export function Badge({ t = 'neutral', symbol, label }: { t?: Tone; symbol?: str
 
 export function StatusBadge({ status }: { status: TaskStatus }) {
   const m = TASK_STATUS_META[status];
+  return <Badge t={m.tone} symbol={m.symbol} label={m.label} />;
+}
+
+export function ApprovalBadge({ status }: { status: TaskApprovalStatus }) {
+  const m = TASK_APPROVAL_META[status];
   return <Badge t={m.tone} symbol={m.symbol} label={m.label} />;
 }
 

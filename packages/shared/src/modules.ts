@@ -16,6 +16,8 @@
  * - İki modül gerektiren özellikler FEATURES içinde tanımlıdır (ör. mesajdan göreve dönüştür).
  */
 
+import type { PermissionKey } from './permissions';
+
 export const MODULE_IDS = ['core', 'tasks', 'messaging', 'task_approval'] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
@@ -46,7 +48,7 @@ export interface WidgetDef {
   title: string;
   description: string;
   /** Bileşeni eklemek için gereken izin. Bileşen yalnızca veriyi gösterir; erişimi RLS belirler. */
-  requires?: string;
+  requires?: PermissionKey;
 }
 
 export interface ModuleDef {

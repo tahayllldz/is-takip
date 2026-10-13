@@ -1,5 +1,6 @@
 export * from './permissions';
 export * from './modules';
+export * from './dashboard';
 export * from './tasks';
 export * from './time';
 export * from './schemas';

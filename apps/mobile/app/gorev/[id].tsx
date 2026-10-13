@@ -1,12 +1,15 @@
 import {
+  APPROVAL_NOTE_MAX,
   HOLD_REASON_MAX,
   acceptTask,
+  approveTask,
   addTaskComment,
   assignmentSteps,
   describeTaskEvent,
   fetchTask,
   formatDateTime,
   markTaskSeen,
+  requestTaskChanges,
   setTaskStatus,
   statusActions,
   toAppError,
@@ -17,7 +20,7 @@ import * as Crypto from 'expo-crypto';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { Button, Card, DueBadge, Empty, ErrorView, Field, Loading, Message, PriorityBadge, StatusBadge, s } from '@/components/ui';
+import { ApprovalBadge, Button, Card, DueBadge, Empty, ErrorView, Field, Loading, Message, PriorityBadge, StatusBadge, colors, s } from '@/components/ui';
 import { useCompany } from '@/lib/company';
 import { keys } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
@@ -32,6 +35,8 @@ export default function TaskScreen() {
   const [comment, setComment] = useState('');
   const [commentId, setCommentId] = useState(() => Crypto.randomUUID());
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [note, setNote] = useState('');
   const seenSent = useRef(false);
 
   const refreshAll = () => {
@@ -76,6 +81,26 @@ export default function TaskScreen() {
     onError: (e) => setFeedback({ kind: 'error', text: toAppError(e).message }),
   });
 
+  const approveM = useMutation({
+    mutationFn: () => approveTask(supabase, id),
+    onSuccess: () => {
+      setFeedback({ kind: 'success', text: 'Görev onaylandı; sorumluya bildirildi.' });
+      refreshAll();
+    },
+    onError: (e) => setFeedback({ kind: 'error', text: toAppError(e).message }),
+  });
+
+  const changesM = useMutation({
+    mutationFn: () => requestTaskChanges(supabase, id, note.trim()),
+    onSuccess: () => {
+      setFeedback({ kind: 'success', text: 'Düzeltme istendi; görev yeniden "Devam ediyor" oldu.' });
+      setChangesOpen(false);
+      setNote('');
+      refreshAll();
+    },
+    onError: (e) => setFeedback({ kind: 'error', text: toAppError(e).message }),
+  });
+
   const commentM = useMutation({
     mutationFn: () => addTaskComment(supabase, { taskId: id, body: comment.trim(), clientRequestId: commentId }),
     onSuccess: () => {
@@ -106,6 +131,15 @@ export default function TaskScreen() {
   const canManage = task.created_by === c.userId || c.can('tasks.manage_all', task.group_id);
   const canStatus = tasksOn && (isAssignee || canManage);
   const actions = statusActions(task.status);
+  const approvalOn = tasksOn && c.enabledModules.includes('task_approval');
+  const approverActive = c.members.some((m) => m.user_id === task.approver_id && m.status === 'active');
+  // Arayüz kararı; kesin kontrol approve_task / request_task_changes içinde
+  const canDecide =
+    approvalOn &&
+    task.approval_status === 'pending' &&
+    c.userId !== task.assignee_id &&
+    ((task.approver_id === c.userId && c.can('tasks.approve', task.group_id)) ||
+      (!approverActive && c.can('tasks.approve', task.group_id) && c.can('tasks.manage_all', task.group_id)));
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={90}>
@@ -124,7 +158,14 @@ export default function TaskScreen() {
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
             <DueBadge task={task} tz={c.timezone} />
+            {approvalOn && task.approval_status ? <ApprovalBadge status={task.approval_status} /> : null}
           </View>
+          {approvalOn && task.approval_status === 'changes_requested' && task.approval_note ? (
+            <View style={[s.card, { backgroundColor: colors.dangerSoft, borderColor: '#f1b8b2', padding: 12 }]} accessibilityRole="alert">
+              <Text style={[s.body, { fontWeight: '700' }]}>↩ Düzeltme istendi ({c.nameOf(task.approval_decided_by)})</Text>
+              <Text style={s.body}>{task.approval_note}</Text>
+            </View>
+          ) : null}
           {task.status === 'on_hold' && task.hold_reason ? <Text style={s.body}>Beklemede nedeni: {task.hold_reason}</Text> : null}
         </View>
 
@@ -174,6 +215,45 @@ export default function TaskScreen() {
                 <Button title="✋ Üstlendim" variant="secondary" busy={acceptM.isPending} onPress={() => acceptM.mutate()} />
               ) : null}
             </View>
+          </Card>
+        ) : null}
+
+        {approvalOn && task.requires_approval ? (
+          <Card title="Onay">
+            <Text style={s.body}>Onaylayacak kişi: {c.nameOf(task.approver_id)}</Text>
+            <Text style={s.muted}>
+              {task.approval_status === 'pending'
+                ? canDecide
+                  ? 'Görev tamamlandı ve onayınızı bekliyor.'
+                  : 'Onaylayıcının kararı bekleniyor.'
+                : task.approval_status === 'approved'
+                  ? 'Onaylandı.'
+                  : 'Görev tamamlanınca onaya düşer.'}
+            </Text>
+            {canDecide ? (
+              <View style={{ gap: 10, marginTop: 10 }}>
+                <Button title="✔ Onayla" busy={approveM.isPending} disabled={changesM.isPending} onPress={() => approveM.mutate()} />
+                {!changesOpen ? (
+                  <Button title="↩ Düzeltme iste" variant="secondary" disabled={approveM.isPending} onPress={() => setChangesOpen(true)} />
+                ) : (
+                  <View>
+                    <Field
+                      label="Neyin düzeltilmesi gerekiyor?"
+                      hint="Sorumluya bildirim olarak gider; görev yeniden Devam ediyor olur."
+                      value={note}
+                      onChangeText={setNote}
+                      maxLength={APPROVAL_NOTE_MAX}
+                      multiline
+                      autoFocus
+                    />
+                    <View style={{ gap: 8 }}>
+                      <Button title="Düzeltme iste" variant="danger" busy={changesM.isPending} disabled={note.trim().length < 3} onPress={() => changesM.mutate()} />
+                      <Button title="Vazgeç" variant="secondary" onPress={() => setChangesOpen(false)} />
+                    </View>
+                  </View>
+                )}
+              </View>
+            ) : null}
           </Card>
         ) : null}
 

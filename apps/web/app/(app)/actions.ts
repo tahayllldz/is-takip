@@ -24,6 +24,10 @@ import {
   removeGroupMember,
   removeMember,
   requestTaskChanges,
+  resetDashboardDefault,
+  resetMyDashboard,
+  saveDashboardDefault,
+  saveMyDashboard,
   revokeInvitation,
   setGroupMemberRole,
   setModuleEnabled,
@@ -35,7 +39,11 @@ import {
   updateCompany,
   updateGroup,
   updateTask,
+  DASHBOARD_PLATFORMS,
+  ROLES,
+  type DashboardPlatform,
   type ModuleId,
+  type Role,
   type TaskChanges,
 } from '@istakip/shared';
 import { revalidatePath } from 'next/cache';
@@ -167,6 +175,58 @@ export async function acceptTaskAction(_p: ActionState, form: FormData): Promise
   try {
     await acceptTask(s.supabase, str(form, 'taskId'));
     return done('Görevi üstlendiniz.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Ana sayfa düzeni (doğrudan argümanla çağrılır; yetki ve bileşen kontrolü veritabanında)
+// ---------------------------------------------------------------------
+
+const isPlatform = (p: unknown): p is DashboardPlatform => (DASHBOARD_PLATFORMS as readonly unknown[]).includes(p);
+const isRole = (r: unknown): r is Role => (ROLES as readonly unknown[]).includes(r);
+const isWidgetList = (w: unknown): w is string[] => Array.isArray(w) && w.length <= 12 && w.every((x) => typeof x === 'string' && x.length <= 40);
+
+export async function saveMyDashboardAction(platform: DashboardPlatform, widgets: string[]): Promise<ActionState> {
+  if (!isPlatform(platform) || !isWidgetList(widgets)) return { error: 'Geçersiz düzen.' };
+  const s = await requireSession();
+  try {
+    await saveMyDashboard(s.supabase, s.companyId, platform, widgets);
+    return done('Ana sayfa düzeniniz kaydedildi.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function resetMyDashboardAction(platform: DashboardPlatform): Promise<ActionState> {
+  if (!isPlatform(platform)) return { error: 'Geçersiz düzen.' };
+  const s = await requireSession();
+  try {
+    await resetMyDashboard(s.supabase, s.companyId, platform);
+    return done('Varsayılan düzene dönüldü.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveDashboardDefaultAction(role: Role, platform: DashboardPlatform, widgets: string[]): Promise<ActionState> {
+  if (!isRole(role) || !isPlatform(platform) || !isWidgetList(widgets)) return { error: 'Geçersiz düzen.' };
+  const s = await requireSession();
+  try {
+    await saveDashboardDefault(s.supabase, s.companyId, role, platform, widgets);
+    return done('Varsayılan düzen kaydedildi; kendi düzenini kaydetmemiş kişilere uygulanır.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function resetDashboardDefaultAction(role: Role, platform: DashboardPlatform): Promise<ActionState> {
+  if (!isRole(role) || !isPlatform(platform)) return { error: 'Geçersiz düzen.' };
+  const s = await requireSession();
+  try {
+    await resetDashboardDefault(s.supabase, s.companyId, role, platform);
+    return done('Standart düzene dönüldü.');
   } catch (e) {
     return fail(e);
   }

@@ -917,7 +917,7 @@ function ConvertToTaskDialog({
               </select>
               {!canAssignOthers ? <p className="hint">Başkasına görev atama yetkiniz yok; görev size verilir.</p> : null}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="gorev-tarih" className="label">
                   Son tarih (isteğe bağlı)

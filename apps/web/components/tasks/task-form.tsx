@@ -93,7 +93,7 @@ export function TaskForm(props: Props) {
         <input {...fieldProps('title', fe.title)} required maxLength={200} className="input" defaultValue={defaults.title} placeholder="Örn. Servis raporunu hazırla" />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field id="groupId" label="Grup (isteğe bağlı)" hint={!canAssignAnywhere && assignableGroupIds.length ? 'Başkasına atamak için yetkili olduğunuz bir grup seçin.' : undefined} error={fe.groupId}>
           <select
             {...fieldProps('groupId', fe.groupId, !canAssignAnywhere && assignableGroupIds.length ? 'x' : undefined)}
@@ -128,7 +128,7 @@ export function TaskForm(props: Props) {
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field id="dueDate" label="Son tarih" error={fe.dueDate}>
           <input {...fieldProps('dueDate', fe.dueDate)} type="date" min={mode === 'create' ? today : undefined} className="input" defaultValue={defaults.dueDate ?? ''} />
         </Field>

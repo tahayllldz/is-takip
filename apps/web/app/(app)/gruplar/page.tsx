@@ -17,10 +17,10 @@ export default async function GroupsPage() {
   return (
     <>
       <PageHeader title="Gruplar" description="Ekipler ve ekip içi görev/mesaj kapsamı. Bir kişi birden fazla grupta olabilir." />
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
           {groups.length ? (
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {groups.map((g) => (
                 <li key={g.id}>
                   <Link href={`/gruplar/${g.id}`} className="card block h-full p-4 hover:border-brand">

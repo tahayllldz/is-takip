@@ -34,4 +34,5 @@ export const keys = {
   conversation: (id: string) => ['conversation', id] as const,
   messages: (id: string) => ['messages', id] as const,
   mentions: (cid: string) => ['mentions', cid] as const,
+  dashboard: (cid: string) => ['dashboard', cid, 'mobile'] as const,
 };

@@ -35,6 +35,8 @@ export interface CompanyContext {
   error: unknown;
   live: boolean;
   can: (perm: PermissionKey, groupId?: string | null) => boolean;
+  /** İzin şirket genelinde veya kapsamdaki gruplardan birinde var mı (ör. ekip özeti) */
+  canAnywhere: (perm: PermissionKey) => boolean;
   nameOf: (id: string | null | undefined) => string;
   setActive: (companyId: string) => void;
   refetch: () => void;
@@ -133,6 +135,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       error: membershipsQ.error ?? companyQ.error,
       live,
       can: (p, g) => hasPermission(perm, p, { groupId: g, enabledModules }),
+      canAnywhere: (p) =>
+        hasPermission(perm, p, { enabledModules }) || perm.scopeGroupIds.some((g) => hasPermission(perm, p, { groupId: g, enabledModules })),
       nameOf: (id) => (id ? (names.get(id) ?? 'Eski üye') : '—'),
       setActive,
       refetch: () => {
