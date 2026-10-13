@@ -80,6 +80,34 @@ Web: `components/shell.tsx → LiveRefresh` (router.refresh). Mobil: TanStack Qu
 - **Mesajdan görev**: `tasks.source_message_id` bileşik FK ile aynı şirketteki mesaja bağlı ve tekil; eşzamanlı dönüştürme tek görev üretir.
 - **Okunmamış**: kişi başına `conversation_reads.last_read_at`; konuşma okununca o konuşmadaki etiket bildirimleri de okundu sayılır.
 
+### ADR-14 · Görev onayı (Aşama 3)
+- Ayrı modül (`task_approval`, Görevler'e bağımlı). Görev başına isteğe bağlı: `requires_approval` + `approver_id`.
+- **Tamamlandı ≠ Onaylandı**: `status` işin yapıldığını, `approval_status` (`pending` / `approved` / `changes_requested`) kabulü
+  gösterir. Tamamlanınca `pending`; düzeltme istenirse not zorunlu, görev `in_progress`'e döner; tamamlanmış görev yeniden
+  açılırsa önceki onay sıfırlanır.
+- Onaylayıcı `tasks.approve` iznine sahip olmalı (sahip, yönetici, grup yöneticisi kendi grubunda); sorumlu kendi görevini
+  onaylayamaz. Onaylayıcı görevi grup üyesi olmasa da görür. Onaylayıcı şirketten ayrılırsa kapsamında `tasks.approve` +
+  `tasks.manage_all` olan devralır. Tekrar/eşzamanlı onay tek karar ve tek bildirim üretir.
+
+### ADR-15 · Düzenlenebilir ana sayfa (Aşama 3)
+- `dashboard_widgets` (kayıt; ortak paketteki `WIDGETS` ile test edilerek aynı tutulur), `dashboard_role_defaults`
+  (şirket/rol/platform), `dashboard_user_layouts` (kişi/platform). Çözüm: kişisel → rol varsayılanı → yerleşik.
+- **Düzen erişimi değiştirmez**: bileşen verisi RLS'li sorgularla gelir; izin gerektiren bileşen (`team_summary`) yetkisiz
+  kişinin düzenine veya o rolün varsayılanına eklenemez (veritabanı kontrolü). Kapalı modülün bileşeni saklanır, gösterilmez.
+- Web: sürükle-bırak + "Yukarı/Aşağı" düğmeleri + Alt+↑/↓, ekran okuyucu duyurusu. Mobil: yukarı/aşağı/kaldır/ekle.
+
+### ADR-16 · Push bildirimleri (Aşama 3)
+- **Kaynak**: yalnızca `private.notify` ile doğrulanmış işlemlerden üretilen bildirimler; `notifications` INSERT tetikleyicisi
+  `push_outbox`'a bildirim başına en fazla bir kayıt yazar (yalnızca etkin cihazı olan kişi için).
+- **Gönderim**: web sunucusundaki `/api/push/dispatch` (Bearer `PUSH_DISPATCH_SECRET`, yönetim anahtarı yalnızca sunucuda).
+  `push_claim_batch` (yalnızca service_role) gönderim anında üyelik/modül/kayda erişimi yeniden doğrular; erişimi kalmayan
+  kişiye gitmez (`skipped`). Expo'ya 100'lük paketler; `DeviceNotRegistered` token'ı kapatır; hiçbir cihaza ulaşılamazsa
+  yeniden denenir (en fazla 5), en az bir cihaza ulaştıysa tekrar gönderilmez (çift push yerine kaçırma tercih edilir).
+- **Kilit ekranı**: yalnızca genel metin ("Size yeni bir görev verildi"); görev/mesaj içeriği, kişi veya şirket adı yok.
+  Veri yalnızca kimlik içerir; dokununca uygulama ayrıntıyı RLS ile çeker. Android kanalı `PRIVATE` görünürlükte.
+- **Tetikleme**: üretimde Supabase Database Webhook (`push_outbox` INSERT → uç nokta) veya zamanlanmış görev; yerelde
+  `pnpm push:dispatch`. Expo Go push'u desteklemez; geliştirme derlemesi (EAS) gerekir.
+
 ### ADR-9 · Davet akışı
 Yönetici `create_invitation` ile davet oluşturur; 64 karakterlik rastgele token **yalnızca bir kez** döner, veritabanında SHA-256
 özeti tutulur; 7 gün geçerli, tek kullanımlık, iptal edilebilir, aynı adrese yeni davet eskisini geçersiz kılar.

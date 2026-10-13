@@ -37,7 +37,28 @@ mantığın kopyasıyla buton göster/gizle kararı verir.
 \* Ek kurallar (RPC içinde): rolleri yalnızca **sahip** değiştirir; yöneticiyi yalnızca sahip çıkarır; sahip çıkarılamaz,
 rolü değiştirilemez; kimse kendi rolünü değiştiremez veya kendini çıkaramaz. Yönetici davetini yalnızca sahip gönderir.
 
-Onay (`tasks.approve`) izni Aşama 3'te eklenecek.
+| İzin | Modül | Kapsam | Sahip | Yönetici | Çalışan | Grup yöneticisi |
+|---|---|---|:-:|:-:|:-:|:-:|
+| `tasks.approve` Tamamlanan görevi onaylama / düzeltme isteme | Görev onayı | Grup | ✓ | ✓ | — | ✓ (kendi grubu) |
+
+## Görev onayı
+| İşlem | Kim |
+|---|---|
+| Onay gerekli yapmak / onaylayıcı seçmek | Görevi oluşturan (oluştururken) veya görevi düzenleyebilen; onaylayıcının `tasks.approve` izni olmalı, sorumlu olamaz |
+| Onaylamak / düzeltme istemek (not zorunlu) | Onaylayıcı; onaylayıcı şirketten ayrıldıysa kapsamında `tasks.approve` + `tasks.manage_all` olan |
+| Onaylanacak görevi görmek | Onaylayıcı (grup üyesi olmasa da) |
+
+## Ana sayfa düzeni
+| İşlem | Kim |
+|---|---|
+| Kendi düzenini değiştirmek (web ve mobil ayrı) | Herkes; izni olmadığı bileşeni (ekip özeti) ekleyemez |
+| Rol/platform varsayılanı belirlemek | `dashboard.manage_defaults` (sahip, yönetici); rolün göremeyeceği bileşen eklenemez |
+
+## Push bildirimleri
+| İşlem | Kim |
+|---|---|
+| Cihazını kaydetmek / kapatmak | Herkes kendi cihazı için (çıkışta otomatik kapatılır) |
+| Kuyruğu işlemek | Yalnızca sunucudaki gönderici (service_role); istemci çağıramaz |
 
 ## Mesajlar üzerindeki haklar
 | İşlem | Kim |

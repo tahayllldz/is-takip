@@ -1,5 +1,38 @@
 # İlerleme kaydı
 
+## 2026-10-13 — Aşama 3: görev onayı, düzenlenebilir ana sayfa, push altyapısı
+
+### Yapılanlar
+- **Görev onayı** (`…0400_task_approval.sql`, ADR-14): modül + `tasks.approve`; "Tamamlanınca onay gerekli" + onaylayıcı;
+  Onay bekliyor / Onaylandı / Düzeltme istendi (not zorunlu, görev yeniden "Devam ediyor"); web ve mobilde karar ekranı,
+  listelerde rozet, "Onayımı bekleyenler" bileşeni.
+- **Düzenlenebilir ana sayfa** (`…0500_dashboard.sql`, ADR-15): bileşen kaydı, rol/platform varsayılanları (Ayarlar),
+  kişisel düzen (web ve mobil ayrı); web: sürükle-bırak + Yukarı/Aşağı + Alt+↑/↓; mobil: yukarı/aşağı/kaldır/ekle.
+- **Push** (`…0600_push.sql`, ADR-16): cihaz kaydı, doğrulanmış bildirimlerden tek kayıtlık kuyruk, gönderim anında erişim
+  denetimi, `/api/push/dispatch` (gizli anahtarlı, yönetim anahtarı sunucuda), genel kilit ekranı metni, mobilde izin/kayıt,
+  çıkışta kayıt kapatma, bildirime dokununca ilgili ekran; `pnpm push:dispatch`.
+- Dar ekranda (375 px) yatay taşma düzeltildi.
+
+### Doğrulananlar (gerçekten çalıştırıldı)
+| Kontrol | Nasıl | Sonuç |
+|---|---|---|
+| Onay akışı: tamamlandı → onay bekliyor → düzeltme (not) → devam ediyor → tamamlandı → onaylandı; işlem geçmişi; bildirimler | Web arayüzünde iki kullanıcı + veritabanı | ✓ |
+| Onay kuralları (sorumlu onaylayamaz, yetkisiz onaylayamaz, eşzamanlı tek karar, yeniden açınca sıfırlama, devralma, modül kapalı) | `70-approval` 12 test | ✓ |
+| Ana sayfa: rol varsayılanı Ayarlar'dan kaydedildi ve kendi düzeni olmayan çalışana uygulandı; kişisel düzen klavye (Alt+↑) ve sürükle-bırak ile değişti, kaydedildi | Web arayüzü + veritabanı | ✓ |
+| Mobil Bugün: düzen değiştirildi/kaydedildi; web düzeninden ayrı saklandı; çalışana ekip özeti sunulmadı | Mobil kod (Expo web) + veritabanı | ✓ |
+| Düzen kuralları (izinli bileşen, rol varsayılanı yetkisi, web/mobil ayrımı, kapalı modül bileşeni korunur) | `80-dashboard` 9 test + 4 birim | ✓ |
+| Push kuyruğu: bildirim başına tek kayıt, cihazı olmayana yok, istemci kuyruğu göremez/gönderici fonksiyonlarını çağıramaz, şirketten çıkarılana gitmez, çıkışta kapanır | `90-push` 7 test | ✓ |
+| Gönderici: 100'lük paket, genel metin (içerik sızmaz), geçersiz cihaz kapatma, ağ hatasında tekrar, çift gönderim yok | 3 birim (Expo taklit) | ✓ |
+| **Gerçek Expo push servisi** ile sözleşme: geçersiz (sahte) token → Expo "DeviceNotRegistered" → cihaz kendiliğinden kapatıldı, kayıt "başarısız" | `/api/push/dispatch` gerçek çağrı | ✓ |
+| Uç nokta anahtarsız/yanlış anahtarla 401 | curl | ✓ |
+| Testler: ortak 27, RLS 121 (gerçek Supabase'de 120 + 1 bilinçli atlama), uçtan uca 15, web derleme, istemci paketinde gizli anahtar yok | | ✓ |
+
+### Doğrulanamayanlar
+- **Gerçek telefona push teslimi denenmedi.** Expo Go push'u desteklemiyor; geliştirme derlemesi (EAS) + iPhone için Apple
+  Developer Program üyeliği (Android için Firebase/FCM) gerekiyor. Telefonda Profil ekranı bunu açıkça yazar.
+- Üretim tetikleyicisi (Supabase Database Webhook) kurulmadı; yerelde `pnpm push:dispatch` ile çalışır.
+- Mobilde onay kararı ve düzen düzenleme gerçek telefonda henüz denenmedi (mobil kod tarayıcıda denendi).
+
 ## 2026-10-13 — Aşama 2 (İletişim) tamamlandı ve doğrulandı
 
 ### Yapılanlar

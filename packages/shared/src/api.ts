@@ -463,6 +463,18 @@ export async function fetchAuditLog(c: Client, companyId: string, limit = 100): 
 }
 
 // ---------------------------------------------------------------------
+// Push cihaz kaydı (mobil)
+// ---------------------------------------------------------------------
+
+export async function registerPushDevice(c: Client, token: string, platform: 'ios' | 'android', deviceName?: string | null): Promise<string> {
+  return run(c.rpc('register_push_device', { p_token: token, p_platform: platform, p_device_name: deviceName ?? null }));
+}
+
+export async function unregisterPushDevice(c: Client, token: string): Promise<void> {
+  await run(c.rpc('unregister_push_device', { p_token: token }));
+}
+
+// ---------------------------------------------------------------------
 // Ana sayfa düzeni
 // ---------------------------------------------------------------------
 

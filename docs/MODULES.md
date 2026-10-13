@@ -37,7 +37,7 @@ Testler: `packages/db-tests/db/50-modules.test.ts`, `60-messaging.test.ts`.
 |---|---|---|
 | Görevler (`tasks`) | — | Grup üyeliğini core'dan kullanır; **İletişim kapalıyken de grup görevleri çalışır.** |
 | İletişim (`messaging`) | — | Grup sohbeti grup üyeliğinden gelir; Görevler kapalıyken de çalışır (yalnızca "göreve dönüştür" kapanır) |
-| Görev onayı (`task_approval`) | Görevler | Aşama 3 |
+| Görev onayı (`task_approval`) | Görevler | Görev başına isteğe bağlı. Kapalıyken: onay kararı ve onaylı yeni görev engelli, onay bildirimi yok; tamamlanan onaylı görev "Onay bekliyor" olarak kaydedilir ve modül açılınca onaylayıcının "Onayımı bekleyenler" listesinde görünür |
 
 **İki modül gerektiren özellikler** (`FEATURES`): "Mesajdan göreve dönüştür" İletişim **ve** Görevler açıkken çalışır.
 İletişim kapatılırsa mesajdan oluşturulmuş görevler kalır; kaynak mesaj bağlantısı "İletişim modülü kapalı" olarak gösterilir.

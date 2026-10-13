@@ -23,6 +23,8 @@ pnpm workspace monorepo (Node ≥ 22.13, pnpm 10):
 - Yeni tablo → RLS aç, politikayı yaz, `select private.apply_api_grants();` ile migration'ı bitir. `00-schema.test.ts` bunu denetler.
 - Şirketler arası referans: bileşik yabancı anahtar `(company_id, x)` kullan.
 - Bildirim yalnızca `private.notify(...)` ile, `dedupe_key` vererek üretilir (tekrar denemede çoğalmaz, alıcının erişimi kontrol edilir).
+  Push bu bildirimlerden kuyrukla üretilir; push metni GENELDİR (içerik, kişi, şirket adı yok) — `packages/shared/src/push.ts`.
+- Yalnızca service_role çağırabilecek fonksiyonlar `private.apply_api_grants()` içinde istemciden geri alınır (ör. `push_claim_batch`).
 - İstemci kaynaklı oluşturma işlemleri `client_request_id` ile tekrar-güvenlidir.
 - Tarihler `timestamptz` (UTC) saklanır, şirketin `timezone` alanıyla (varsayılan Asia/Famagusta) gösterilir. Gün hesabı veritabanında yapılır.
 - Yönetim anahtarı (`SUPABASE_SECRET_KEY`) yalnızca `apps/web/lib/supabase/admin.ts` içinde (server-only). Mobil/tarayıcıya asla.
@@ -41,6 +43,7 @@ pnpm test:e2e             # gerçek Supabase'e karşı uçtan uca (çalışmıyo
 pnpm db:seed-demo         # sentetik demo şirketi
 pnpm dev:web              # http://localhost:3000
 pnpm dev:mobile           # Expo
+pnpm push:dispatch        # yerel push gönderici (web sunucusu çalışırken; PUSH_DISPATCH_SECRET)
 pnpm typecheck
 ```
 

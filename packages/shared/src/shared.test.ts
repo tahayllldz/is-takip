@@ -3,9 +3,12 @@ import {
   addableWidgets,
   attachmentPath,
   attachmentProblem,
+  buildPushMessage,
   checkModuleToggle,
   dueLabel,
+  dispatchPush,
   dueState,
+  genericPushBody,
   hasPermission,
   isFeatureEnabled,
   isOverdue,
@@ -219,5 +222,67 @@ describe('ana sayfa düzeni', () => {
     expect(moveItem(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b']);
     expect(moveItem(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c']);
     expect(moveTo(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
+  });
+});
+
+describe('push bildirimi (gönderici mantığı; Expo çağrısı test içinde taklit edilir)', () => {
+  const job = (id: number, tokens: string[], type = 'task_assigned', data: Record<string, unknown> = {}) => ({
+    outbox_id: id,
+    notification_id: `n-${id}`,
+    type,
+    entity_type: type.startsWith('message') ? 'message' : 'task',
+    entity_id: `e-${id}`,
+    data,
+    tokens,
+  });
+
+  it('kilit ekranına içerik taşınmaz: genel metin, yalnızca kimlikler', () => {
+    const m = buildPushMessage('ExponentPushToken[abcdefghijkl]', job(1, [], 'message_mention', { conversation_id: 'c-1', body: 'gizli mesaj' }));
+    expect(m.title).toBe('İş Takip');
+    expect(m.body).toBe('Bir mesajda etiketlendiniz');
+    expect(JSON.stringify(m)).not.toContain('gizli mesaj');
+    expect(m.data).toEqual({ notificationId: 'n-1', entityType: 'message', entityId: 'e-1', conversationId: 'c-1' });
+    expect(genericPushBody('bilinmeyen')).toBe('Yeni bir bildiriminiz var');
+  });
+
+  it('100’lük paketler; geçersiz cihaz kapatılır; ağ hatası yeniden denenir; cihazsız kayıt atlanır', async () => {
+    const many = Array.from({ length: 150 }, (_, i) => `ExponentPushToken[tok${String(i).padStart(10, '0')}]`);
+    const jobs = [job(1, many), job(2, ['ExponentPushToken[olmeyencihaz1]']), job(3, ['ExponentPushToken[agihatasi001]']), job(4, [])];
+    const sends: number[] = [];
+    const completes: { outboxId: number; status: string; invalidTokens?: string[] }[] = [];
+    const summary = await dispatchPush({
+      claim: async () => jobs,
+      complete: async (c) => void completes.push(c),
+      send: async (messages) => {
+        sends.push(messages.length);
+        if (messages.some((m) => m.to.includes('agihatasi'))) throw new Error('Expo push HTTP 503');
+        return messages.map((m) =>
+          m.to.includes('olmeyen') ? { status: 'error' as const, message: 'not registered', details: { error: 'DeviceNotRegistered' } } : { status: 'ok' as const, id: 't' },
+        );
+      },
+    });
+    expect(sends).toEqual([100, 52]);
+    // 2. pakette ağ hatası: hiçbir cihazına ulaşılamayan kayıtlar (2, 3) yeniden denenir;
+    // ilk 100 cihazına ulaşılan kayıt (1) "gönderildi" sayılır — aynı push ikinci kez gitmez
+    expect(completes.find((c) => c.outboxId === 1)?.status).toBe('sent');
+    expect(completes.find((c) => c.outboxId === 2)?.status).toBe('pending');
+    expect(completes.find((c) => c.outboxId === 3)?.status).toBe('pending');
+    expect(completes.find((c) => c.outboxId === 4)?.status).toBe('skipped');
+    expect(summary.claimed).toBe(4);
+  });
+
+  it('başarılı ve geçersiz cihaz yanıtları ayrıştırılır', async () => {
+    const completes: { outboxId: number; status: string; invalidTokens?: string[] }[] = [];
+    await dispatchPush({
+      claim: async () => [job(1, ['ExponentPushToken[iyicihaz0001]', 'ExponentPushToken[eskicihaz001]'])],
+      complete: async (c) => void completes.push(c),
+      send: async (messages) =>
+        messages.map((m) =>
+          m.to.includes('eski') ? { status: 'error' as const, details: { error: 'DeviceNotRegistered' } } : { status: 'ok' as const, id: 'x' },
+        ),
+    });
+    expect(completes).toEqual([
+      expect.objectContaining({ outboxId: 1, status: 'sent', invalidTokens: ['ExponentPushToken[eskicihaz001]'] }),
+    ]);
   });
 });

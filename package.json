@@ -18,7 +18,8 @@
     "db:stop": "supabase stop",
     "db:status": "supabase status",
     "db:reset": "supabase db reset",
-    "db:seed-demo": "pnpm --filter @istakip/db-tests seed-demo"
+    "db:seed-demo": "pnpm --filter @istakip/db-tests seed-demo",
+    "push:dispatch": "node scripts/push-dispatch.mjs"
   },
   "devDependencies": {
     "supabase": "2.120.0",

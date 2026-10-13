@@ -7,6 +7,7 @@ import { Loading, colors, s } from '@/components/ui';
 import { CompanyProvider } from '@/lib/company';
 import { queryClient } from '@/lib/query';
 import { SessionProvider, useSession } from '@/lib/session';
+import { usePushNavigation } from '@/lib/push';
 import { isConfigured } from '@/lib/supabase';
 
 function SetupScreen() {
@@ -28,6 +29,7 @@ function SetupScreen() {
 
 function Gate() {
   const { session, loading } = useSession();
+  usePushNavigation(Boolean(session));
   if (!isConfigured) return <SetupScreen />;
   if (loading) {
     return (

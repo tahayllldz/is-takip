@@ -116,6 +116,24 @@ istemcisinde Realtime olayı ve güncel durum → uygulama yeniden açılınca o
 pnpm typecheck
 ```
 
+## Push bildirimleri
+Kuyruk ve gönderici hazırdır; gerçek telefonda push için ayrıca şunlar gerekir (Expo Go push'u desteklemez):
+
+1. **Sunucu anahtarı**: `apps/web/.env.local` → `PUSH_DISPATCH_SECRET` (uzun rastgele değer; yalnızca sunucu).
+2. **Gönderici tetikleme**:
+   - Yerel: web sunucusu çalışırken ayrı terminalde `pnpm push:dispatch` (5 sn'de bir kuyruğu işler).
+   - Üretim: Supabase → Database → Webhooks → `push_outbox` tablosu INSERT → `POST https://<web-adresi>/api/push/dispatch`,
+     başlık `Authorization: Bearer <PUSH_DISPATCH_SECRET>`. (Alternatif: dakikalık zamanlanmış görev.)
+3. **Uygulama derlemesi** (Expo hesabı gerekir):
+   - `pnpm --filter @istakip/mobile exec eas init` → `app.json`'a `extra.eas.projectId` yazılır.
+   - **iPhone**: Apple Developer Program üyeliği (ücretli) + `eas build --profile development --platform ios`
+     (EAS, push sertifikasını kendisi oluşturur; Windows'ta iOS derlemesi yalnızca EAS bulutunda yapılabilir).
+   - **Android**: Firebase projesi + `google-services.json` + FCM V1 hizmet hesabı anahtarı EAS'a yüklenir;
+     `eas build --profile development --platform android`.
+4. Geliştirme derlemesi telefona kurulunca: Profil → Push bildirimleri → **Bu cihazda aç**.
+
+Kilit ekranında yalnızca genel metin görünür ("Size yeni bir görev verildi"); görev/mesaj içeriği gönderilmez.
+
 ## Supabase Cloud ile (Docker yerine)
 1. supabase.com'da proje açın (bölge: Frankfurt `eu-central-1` önerilir).
 2. `pnpm exec supabase login` ve `pnpm exec supabase link --project-ref <ref>`; ardından `pnpm exec supabase db push`.

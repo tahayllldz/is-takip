@@ -48,5 +48,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // /api/push: sunucudan sunucuya çağrı (gizli anahtarla korunur), oturum çerezi kullanmaz
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/push|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };
