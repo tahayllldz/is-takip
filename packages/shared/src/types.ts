@@ -138,6 +138,84 @@ export interface Invitation {
   revoked_at: string | null;
 }
 
+export type ConversationKind = 'group' | 'direct';
+
+export interface Conversation {
+  id: string;
+  company_id: string;
+  kind: ConversationKind;
+  group_id: string | null;
+  direct_key: string | null;
+  created_at: string;
+  last_message_at: string | null;
+}
+
+/** public.conversation_list satırı */
+export interface ConversationListItem {
+  id: string;
+  kind: ConversationKind;
+  group_id: string | null;
+  title: string;
+  other_user_id: string | null;
+  last_message_at: string | null;
+  last_message_body: string | null;
+  last_message_author: string | null;
+  last_message_deleted: boolean;
+  last_message_has_files: boolean;
+  unread_count: number;
+  can_post: boolean;
+}
+
+export interface ConversationDetail {
+  conversation: Conversation;
+  /** Grup adı veya karşı tarafın adı (çağıran tarafta doldurulur) */
+  groupName: string | null;
+  /** Konuşmayı görebilen kişiler: grup üyeleri veya iki katılımcı (@etiket adayları) */
+  memberIds: string[];
+}
+
+export interface MessageAttachment {
+  id: string;
+  message_id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  is_image: boolean;
+}
+
+export interface Message {
+  id: string;
+  company_id: string;
+  conversation_id: string;
+  author_id: string;
+  body: string;
+  client_request_id: string;
+  created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  attachments: MessageAttachment[];
+  mentions: { user_id: string }[];
+}
+
+/** Mesajdan oluşturulmuş görevin özeti (yalnızca görebildiği görevler döner) */
+export interface MessageTaskLink {
+  id: string;
+  title: string;
+  status: Task['status'];
+  source_message_id: string;
+}
+
+export interface MentionItem {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  is_read: boolean;
+}
+
 export interface AuditEntry {
   id: number;
   company_id: string;

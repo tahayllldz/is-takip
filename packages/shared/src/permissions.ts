@@ -68,6 +68,8 @@ export const PERMISSIONS = [
   { key: 'tasks.assign', module: 'tasks', scope: 'group', label: 'Başkasına görev atama' },
   { key: 'tasks.view_all', module: 'tasks', scope: 'group', label: 'Kapsamdaki tüm görevleri görme' },
   { key: 'tasks.manage_all', module: 'tasks', scope: 'group', label: 'Kapsamdaki görevleri düzenleme ve yeniden atama' },
+  { key: 'messages.direct', module: 'messaging', scope: 'company', label: 'Birebir mesaj başlatma' },
+  { key: 'messages.moderate', module: 'messaging', scope: 'group', label: 'Grup sohbetinde başkasının mesajını silme' },
 ] as const satisfies readonly PermissionDef[];
 
 export type PermissionKey = (typeof PERMISSIONS)[number]['key'];
@@ -78,11 +80,11 @@ const ALL_KEYS = PERMISSIONS.map((p) => p.key);
 export const ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = {
   owner: ALL_KEYS,
   admin: ALL_KEYS.filter((k) => k !== 'company.manage'),
-  employee: ['tasks.create'],
+  employee: ['tasks.create', 'messages.direct'],
 };
 
 /** Grup yöneticisinin yalnızca kendi grubunda aldığı izinler. */
-export const GROUP_MANAGER_PERMISSIONS: readonly PermissionKey[] = ['groups.manage'];
+export const GROUP_MANAGER_PERMISSIONS: readonly PermissionKey[] = ['groups.manage', 'messages.moderate'];
 
 export interface MembershipForPermission {
   role: Role;

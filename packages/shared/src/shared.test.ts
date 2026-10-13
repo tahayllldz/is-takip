@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachmentPath,
+  attachmentProblem,
   checkModuleToggle,
   dueLabel,
   dueState,
@@ -10,6 +12,8 @@ import {
   localDateKey,
   menuFor,
   overdueDays,
+  safeStorageFileName,
+  splitMentions,
   statusChangeSchema,
   taskCreateSchema,
   toAppError,
@@ -139,5 +143,34 @@ describe('hata eşleme', () => {
     expect(toAppError({ code: '42501', message: 'permission denied' }).message).toBe('Bu işlem için yetkiniz yok.');
     expect(toAppError(new TypeError('Failed to fetch')).code).toBe('network');
     expect(toAppError({ message: 'garip' }).code).toBe('unknown');
+  });
+});
+
+describe('mesaj ekleri ve etiketler', () => {
+  const uuid = '6f1c2b8e-3a4d-4c5e-9f60-7a8b9c0d1e2f';
+  // Veritabanındaki private.attachment_path_conversation ile aynı biçim
+  const DB_PATH = new RegExp('^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}/[^/]{1,200}$');
+
+  it('Storage dosya adı ASCII’ye çevrilir, uzantı korunur', () => {
+    expect(safeStorageFileName('Servis Formu (İmzalı) Şubat.PDF')).toBe('Servis-Formu-Imzali-Subat.pdf');
+    expect(safeStorageFileName('çğüöş.jpg')).toBe('cguos.jpg');
+    expect(safeStorageFileName('../../etc/passwd')).not.toContain('/');
+    expect(safeStorageFileName('')).toBe('dosya');
+    expect(attachmentPath(uuid, uuid, uuid.toUpperCase(), 'Rapor ğ.xlsx')).toMatch(DB_PATH);
+  });
+
+  it('boyut ve tür sınırı', () => {
+    expect(attachmentProblem({ size: 11 * 1024 * 1024, type: 'application/pdf' })).toMatch(/10 MB/);
+    expect(attachmentProblem({ size: 100, type: 'application/x-msdownload' })).toMatch(/desteklenmiyor/);
+    expect(attachmentProblem({ size: 100, type: 'image/jpeg' })).toBeNull();
+  });
+
+  it('yalnızca gerçekten etiketlenen kişiler vurgulanır', () => {
+    const parts = splitMentions('@Ayşe Demo ve @Mehmet bakar mısınız? @Can', [
+      { id: 'a', name: 'Ayşe Demo' },
+      { id: 'm', name: 'Mehmet' },
+    ]);
+    expect(parts.filter((p) => p.userId).map((p) => p.userId)).toEqual(['a', 'm']);
+    expect(parts.map((p) => p.text).join('')).toBe('@Ayşe Demo ve @Mehmet bakar mısınız? @Can');
   });
 });

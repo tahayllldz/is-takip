@@ -14,16 +14,23 @@ import type { TaskStatus } from './tasks';
 import type {
   AppNotification,
   AuditEntry,
+  Conversation,
+  ConversationDetail,
+  ConversationListItem,
   GroupWithMembers,
   Invitation,
   Member,
   MembershipWithCompany,
+  MentionItem,
+  Message,
+  MessageTaskLink,
   Task,
   TaskComment,
   TaskDetail,
   TaskEvent,
   TaskSummaryRow,
 } from './types';
+import type { TaskPriority } from './tasks';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Client = SupabaseClient<any, any, any>;
@@ -404,6 +411,236 @@ export async function fetchAuditLog(c: Client, companyId: string, limit = 100): 
 }
 
 // ---------------------------------------------------------------------
+// İletişim: sohbetler, mesajlar, ekler
+// ---------------------------------------------------------------------
+
+export const ATTACHMENT_BUCKET = 'message-attachments';
+export const MESSAGE_PAGE_SIZE = 50;
+/** Storage kovasındaki sınırla aynı (10 MB) */
+export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENT_MAX_COUNT = 10;
+export const ATTACHMENT_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+] as const;
+
+const MESSAGE_COLUMNS = '*, attachments:message_attachments(*), mentions:message_mentions(user_id)';
+
+export async function fetchConversationList(c: Client, companyId: string): Promise<ConversationListItem[]> {
+  const rows = await run<(ConversationListItem & { unread_count: number | string })[]>(
+    c.rpc('conversation_list', { p_company: companyId }),
+  );
+  return rows.map((r) => ({ ...r, unread_count: Number(r.unread_count) }));
+}
+
+export async function fetchConversation(c: Client, conversationId: string): Promise<ConversationDetail | null> {
+  const rows = await run<Conversation[]>(c.from('conversations').select('*').eq('id', conversationId).limit(1));
+  const conversation = rows[0];
+  if (!conversation) return null;
+  if (conversation.kind === 'group' && conversation.group_id) {
+    const [groups, members] = await Promise.all([
+      run<{ name: string }[]>(c.from('groups').select('name').eq('id', conversation.group_id).limit(1)),
+      run<{ user_id: string }[]>(c.from('group_members').select('user_id').eq('group_id', conversation.group_id)),
+    ]);
+    return { conversation, groupName: groups[0]?.name ?? null, memberIds: members.map((m) => m.user_id) };
+  }
+  const participants = await run<{ user_id: string }[]>(
+    c.from('conversation_participants').select('user_id').eq('conversation_id', conversationId),
+  );
+  return { conversation, groupName: null, memberIds: participants.map((p) => p.user_id) };
+}
+
+/** En yeni sayfa (veya `before` öncesi) — eskiden yeniye sıralı döner. */
+export async function fetchMessages(
+  c: Client,
+  conversationId: string,
+  opts: { before?: string; limit?: number } = {},
+): Promise<Message[]> {
+  let q = c.from('messages').select(MESSAGE_COLUMNS).eq('conversation_id', conversationId);
+  if (opts.before) q = q.lt('created_at', opts.before);
+  const rows = await run<Message[]>(q.order('created_at', { ascending: false }).limit(opts.limit ?? MESSAGE_PAGE_SIZE));
+  return rows.reverse();
+}
+
+/** Mesajlardan oluşturulmuş görevler (RLS: yalnızca görebildikleri) */
+export async function fetchMessageTasks(c: Client, messageIds: string[]): Promise<MessageTaskLink[]> {
+  if (messageIds.length === 0) return [];
+  return run(c.from('tasks').select('id, title, status, source_message_id').in('source_message_id', messageIds));
+}
+
+export interface SendMessageInput {
+  conversationId: string;
+  body: string;
+  /** Aynı mesaj yeniden gönderilirse (bağlantı koptu, çift dokunma) aynı kimlik kullanılır → tek mesaj */
+  clientRequestId: string;
+  mentionIds?: string[];
+  attachments?: { path: string; name: string }[];
+}
+
+export async function sendMessage(c: Client, input: SendMessageInput): Promise<Message> {
+  const row = await run<Omit<Message, 'attachments' | 'mentions'>>(
+    c
+      .rpc('send_message', {
+        p_conversation: input.conversationId,
+        p_body: input.body,
+        p_client_request_id: input.clientRequestId,
+        p_mentions: input.mentionIds ?? [],
+        p_attachments: input.attachments ?? [],
+      })
+      .single(),
+  );
+  return { ...row, attachments: [], mentions: (input.mentionIds ?? []).map((user_id) => ({ user_id })) };
+}
+
+export async function deleteMessage(c: Client, messageId: string): Promise<void> {
+  await run(c.rpc('delete_message', { p_message: messageId }));
+}
+
+export async function markConversationRead(c: Client, conversationId: string): Promise<void> {
+  await run(c.rpc('mark_conversation_read', { p_conversation: conversationId }));
+}
+
+export async function getOrCreateDirectConversation(c: Client, companyId: string, userId: string): Promise<string> {
+  return run(c.rpc('get_or_create_direct_conversation', { p_company: companyId, p_user: userId }));
+}
+
+export interface MessageToTaskInput {
+  messageId: string;
+  title: string;
+  assigneeId: string;
+  clientRequestId: string;
+  description?: string | null;
+  dueDate?: string | null;
+  dueTime?: string | null;
+  priority?: TaskPriority;
+}
+
+export async function createTaskFromMessage(c: Client, input: MessageToTaskInput): Promise<Task> {
+  return run(
+    c
+      .rpc('create_task_from_message', {
+        p_message: input.messageId,
+        p_title: input.title,
+        p_assignee: input.assigneeId,
+        p_client_request_id: input.clientRequestId,
+        p_description: input.description ?? null,
+        p_due_date: input.dueDate ?? null,
+        p_due_time: input.dueTime ?? null,
+        p_priority: input.priority ?? 'normal',
+      })
+      .single(),
+  );
+}
+
+export async function fetchMyMentions(c: Client, companyId: string, limit = 10): Promise<MentionItem[]> {
+  return run(c.rpc('my_mentions', { p_company: companyId, p_limit: limit }));
+}
+
+const TR_ASCII: Record<string, string> = { ı: 'i', İ: 'I', ş: 's', Ş: 'S', ğ: 'g', Ğ: 'G', ü: 'u', Ü: 'U', ö: 'o', Ö: 'O', ç: 'c', Ç: 'C' };
+
+/** Storage anahtarı yalnızca ASCII kabul eder; görünen ad ayrıca saklanır. */
+export function safeStorageFileName(name: string): string {
+  const ascii = name
+    .replace(/[ıİşŞğĞüÜöÖçÇ]/g, (ch) => TR_ASCII[ch] ?? ch)
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '');
+  const dot = ascii.lastIndexOf('.');
+  const base = (dot > 0 ? ascii.slice(0, dot) : ascii).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'dosya';
+  const ext = dot > 0 ? ascii.slice(dot + 1).replace(/[^A-Za-z0-9]/g, '').slice(0, 10) : '';
+  return (base.slice(0, 80) + (ext ? `.${ext.toLowerCase()}` : '')).slice(0, 100);
+}
+
+/** <şirket>/<konuşma>/<yükleme>/<dosya> — veritabanındaki RLS bu biçimi denetler */
+export function attachmentPath(companyId: string, conversationId: string, uploadId: string, fileName: string): string {
+  return `${companyId}/${conversationId}/${uploadId.toLowerCase()}/${safeStorageFileName(fileName)}`;
+}
+
+export function attachmentProblem(file: { size: number; type: string }): string | null {
+  if (file.size > ATTACHMENT_MAX_BYTES) return 'Dosya 10 MB’tan büyük olamaz.';
+  if (file.type && !(ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return 'Bu dosya türü desteklenmiyor. Fotoğraf, PDF, Word, Excel, PowerPoint veya metin dosyası ekleyin.';
+  }
+  return null;
+}
+
+/**
+ * Dosyayı kullanıcının kendi oturumuyla özel kovaya yükler (RLS: yalnızca yazabildiği konuşmaya).
+ * Aynı yol yeniden yüklenirse (ağ hatası sonrası tekrar) "zaten var" hatası başarı sayılır.
+ */
+export async function uploadAttachment(
+  c: Client,
+  input: { companyId: string; conversationId: string; uploadId: string; fileName: string; body: Blob | ArrayBuffer | Uint8Array; contentType: string },
+): Promise<string> {
+  const path = attachmentPath(input.companyId, input.conversationId, input.uploadId, input.fileName);
+  let res: { error: unknown };
+  try {
+    res = await c.storage.from(ATTACHMENT_BUCKET).upload(path, input.body, { contentType: input.contentType, upsert: false });
+  } catch (e) {
+    throw toAppError(e);
+  }
+  if (res.error) {
+    const err = res.error as { statusCode?: string | number; status?: number; message?: string };
+    const status = String(err.statusCode ?? err.status ?? '');
+    if (status === '409' || /already exists|duplicate/i.test(err.message ?? '')) return path;
+    if (status === '413' || /maximum allowed size|too large/i.test(err.message ?? '')) {
+      throw new AppError('invalid', 'Dosya 10 MB’tan büyük olamaz.');
+    }
+    if (status === '415' || /mime type/i.test(err.message ?? '')) {
+      throw new AppError('invalid', 'Bu dosya türü desteklenmiyor.');
+    }
+    throw toAppError(res.error);
+  }
+  return path;
+}
+
+/** Gönderilmeden vazgeçilen yüklemeyi siler (mesaja bağlı dosya RLS ile silinemez). */
+export async function removePendingAttachment(c: Client, path: string): Promise<void> {
+  await c.storage.from(ATTACHMENT_BUCKET).remove([path]);
+}
+
+/** Kısa süreli imzalı bağlantılar (yalnızca RLS'in izin verdiği dosyalar için üretilir). */
+export async function signAttachmentUrls(c: Client, paths: string[], expiresInSeconds = 600): Promise<Record<string, string>> {
+  if (paths.length === 0) return {};
+  const res = await c.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, expiresInSeconds);
+  if (res.error) throw toAppError(res.error);
+  const out: Record<string, string> = {};
+  for (const r of res.data ?? []) if (r.path && r.signedUrl && !r.error) out[r.path] = r.signedUrl;
+  return out;
+}
+
+/** Mesaj metnindeki @Ad Soyad ifadelerini parçalara ayırır (yalnızca gerçekten etiketlenen kişiler vurgulanır). */
+export function splitMentions(body: string, mentioned: { id: string; name: string }[]): { text: string; userId?: string }[] {
+  const names = mentioned.filter((m) => m.name).sort((a, b) => b.name.length - a.name.length);
+  if (names.length === 0) return [{ text: body }];
+  const escaped = names.map((m) => m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`@(${escaped.join('|')})`, 'g');
+  const parts: { text: string; userId?: string }[] = [];
+  let last = 0;
+  for (const match of body.matchAll(re)) {
+    const idx = match.index ?? 0;
+    if (idx > last) parts.push({ text: body.slice(last, idx) });
+    const who = names.find((m) => m.name === match[1]);
+    parts.push({ text: match[0], userId: who?.id });
+    last = idx + match[0].length;
+  }
+  if (last < body.length) parts.push({ text: body.slice(last) });
+  return parts;
+}
+
+// ---------------------------------------------------------------------
 // Realtime (RLS aboneye göre uygulanır; olay yalnızca "yenile" sinyalidir)
 // ---------------------------------------------------------------------
 
@@ -420,7 +657,13 @@ export function subscribeCompanyChanges(
   c: Client,
   companyId: string,
   userId: string,
-  handlers: { onTasks?: () => void; onNotifications?: () => void; onLive?: (status: LiveStatus) => void },
+  handlers: {
+    onTasks?: () => void;
+    onNotifications?: () => void;
+    /** Yeni/silinen mesaj. Konuşma kimliği yalnızca hangi listenin yenileneceğine dair ipucudur. */
+    onMessages?: (conversationId: string | null) => void;
+    onLive?: (status: LiveStatus) => void;
+  },
 ): () => void {
   let channel: RealtimeChannel | null = null;
   let stopped = false;
@@ -432,8 +675,15 @@ export function subscribeCompanyChanges(
     .catch(() => undefined)
     .then(() => {
       if (stopped) return;
-      channel = c
-        .channel(`company:${companyId}:${userId}`)
+      let ch = c.channel(`company:${companyId}:${userId}`);
+      if (handlers.onMessages) {
+        const onMessages = handlers.onMessages;
+        ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `company_id=eq.${companyId}` }, (p) => {
+          const row = (p.new ?? p.old ?? {}) as { conversation_id?: string };
+          onMessages(row.conversation_id ?? null);
+        });
+      }
+      channel = ch
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `company_id=eq.${companyId}` }, () =>
           handlers.onTasks?.(),
         )

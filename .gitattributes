@@ -1,0 +1,6 @@
+# Satır sonları depoda ve çalışma kopyasında LF (Windows CRLF dönüşümü kapalı)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
