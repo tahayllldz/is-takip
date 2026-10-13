@@ -67,6 +67,19 @@ Gerçek Supabase'de doğrulanırken bulunan iki kural (`subscribeCompanyChanges`
   yeniden çeker. Abonelik reddedilirse durum "bağlantı yok" olur.
 Web: `components/shell.tsx → LiveRefresh` (router.refresh). Mobil: TanStack Query + AppState + expo-network.
 
+### ADR-13 · Mesajlaşma ve dosyalar (Aşama 2)
+- **Grup sohbeti = grup**: her grubun tek sohbeti vardır (tetikleyiciyle oluşur); üyelik `group_members`'tan okunur, ayrı katılımcı
+  listesi tutulmaz. Böylece gruptan çıkarma mesaj ve dosya erişimini de aynı anda keser.
+- **Birebir sohbet**: `direct_key` (sıralı iki kullanıcı kimliği) ile şirket içinde tekil; `get_or_create_direct_conversation` tekrar-güvenli.
+- **Mesaj tekilliği**: `(author_id, client_request_id)`. İstemci bekleyen mesajı (web: sekme oturumu, mobil: cihaz deposu) kimliğiyle
+  saklar; bağlantı koptuğunda veya sayfa yenilendiğinde aynı kimlikle yeniden gönderir → tek kayıt.
+- **Dosyalar**: özel `message-attachments` kovası (10 MB, izinli türler). Yol `<şirket>/<konuşma>/<yükleme>/<ad>`. Yükleme kullanıcının
+  kendi oturumuyla yapılır; `storage.objects` politikaları konuşma yetki fonksiyonlarını kullanır. Mesaja bağlanırken boyut/tür
+  istemciden değil Storage kaydından alınır; başkasının veya başka konuşmanın yüklemesi bağlanamaz. Görüntüleme 10 dakikalık imzalı
+  bağlantıyla. Gerçek Supabase storage tablolarından SQL ile silmeyi engeller; gönderilmeyen yüklemeler Storage API ile silinir.
+- **Mesajdan görev**: `tasks.source_message_id` bileşik FK ile aynı şirketteki mesaja bağlı ve tekil; eşzamanlı dönüştürme tek görev üretir.
+- **Okunmamış**: kişi başına `conversation_reads.last_read_at`; konuşma okununca o konuşmadaki etiket bildirimleri de okundu sayılır.
+
 ### ADR-9 · Davet akışı
 Yönetici `create_invitation` ile davet oluşturur; 64 karakterlik rastgele token **yalnızca bir kez** döner, veritabanında SHA-256
 özeti tutulur; 7 gün geçerli, tek kullanımlık, iptal edilebilir, aynı adrese yeni davet eskisini geçersiz kılar.

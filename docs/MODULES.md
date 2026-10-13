@@ -22,7 +22,11 @@ Her modülün kendi migration dosyası modül kaydını, izinlerini, tabloların
    modülün kayıtlarını **salt okunur** görebilir (görev sayfasında "Arşiv görünümü" uyarısıyla). Yazma her durumda engellidir.
 8. **Yeniden açınca** mevcut veriler, bildirimler ve işlemler kaldığı yerden kullanılabilir.
 
-Testler: `packages/db-tests/db/50-modules.test.ts`.
+**İletişim için istisna (gizlilik):** İletişim kapalıyken `archive.view` sahibi yalnızca **kendisinin üyesi olduğu**
+konuşmaları salt okunur görür. Modülü kapatmak başkalarının birebir veya grup mesajlarını açmaz (aksi halde "kapat → oku → aç"
+ile özel mesajlar okunabilirdi). Ek dosyalar da aynı kurala bağlıdır (`storage.objects` politikaları).
+
+Testler: `packages/db-tests/db/50-modules.test.ts`, `60-messaging.test.ts`.
 
 ## Bağımlılık kuralları
 - `core` (Temel) kapatılamaz. **Gruplar, üyelik, davet, bildirim kutusu ve işlem geçmişi core'dadır.**
@@ -32,7 +36,7 @@ Testler: `packages/db-tests/db/50-modules.test.ts`.
 | Modül | Bağımlı olduğu | Not |
 |---|---|---|
 | Görevler (`tasks`) | — | Grup üyeliğini core'dan kullanır; **İletişim kapalıyken de grup görevleri çalışır.** |
-| İletişim (`messaging`) | — | Aşama 2 |
+| İletişim (`messaging`) | — | Grup sohbeti grup üyeliğinden gelir; Görevler kapalıyken de çalışır (yalnızca "göreve dönüştür" kapanır) |
 | Görev onayı (`task_approval`) | Görevler | Aşama 3 |
 
 **İki modül gerektiren özellikler** (`FEATURES`): "Mesajdan göreve dönüştür" İletişim **ve** Görevler açıkken çalışır.

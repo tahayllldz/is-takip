@@ -31,11 +31,24 @@ mantığın kopyasıyla buton göster/gizle kararı verir.
 | `tasks.assign` Başkasına görev atama | Görevler | Grup | ✓ | ✓ | — | — |
 | `tasks.view_all` Kapsamdaki tüm görevleri görme | Görevler | Grup | ✓ | ✓ | — | — |
 | `tasks.manage_all` Kapsamdaki görevleri düzenleme/yeniden atama | Görevler | Grup | ✓ | ✓ | — | — |
+| `messages.direct` Birebir mesaj başlatma | İletişim | Şirket | ✓ | ✓ | ✓ | — |
+| `messages.moderate` Grup sohbetinde başkasının mesajını silme | İletişim | Grup | ✓ | ✓ | — | ✓ (kendi grubu) |
 
 \* Ek kurallar (RPC içinde): rolleri yalnızca **sahip** değiştirir; yöneticiyi yalnızca sahip çıkarır; sahip çıkarılamaz,
 rolü değiştirilemez; kimse kendi rolünü değiştiremez veya kendini çıkaramaz. Yönetici davetini yalnızca sahip gönderir.
 
-İletişim (`messages.*`) ve onay (`tasks.approve`) izinleri ilgili aşamalarda eklenecek.
+Onay (`tasks.approve`) izni Aşama 3'te eklenecek.
+
+## Mesajlar üzerindeki haklar
+| İşlem | Kim |
+|---|---|
+| Grup sohbetini okumak/yazmak | Yalnızca grubun **aktif üyeleri**. Şirket sahibi ve yöneticiler de üye değilse göremez; gerekirse kendini gruba ekler (işlem geçmişine yazılır) |
+| Birebir sohbet | Yalnızca iki katılımcı; karşı taraf şirketten ayrılınca geçmiş okunur, yeni mesaj yazılamaz |
+| Dosya yüklemek / indirmek | Konuşmaya yazabilen yükler; konuşmayı görebilen, silinmemiş mesajın dosyasını kısa süreli imzalı bağlantıyla indirir (kova herkese açık değil) |
+| @etiketlemek | Yalnızca konuşmanın üyeleri etiketlenebilir; etiket bildirim üretir, görev ataması değildir |
+| Mesaj silmek | Yazarı; grup sohbetinde `messages.moderate` izni olan (işlem geçmişine yazılır) |
+| Göreve dönüştürmek | Mesajı görebilen; görev atama kuralları aynen geçerli (çalışan yalnızca kendine) |
+| Arşivlenmiş grup | Geçmiş okunur, yeni mesaj yazılamaz |
 
 ## Görev üzerindeki haklar
 | İşlem | Kim |
@@ -50,7 +63,7 @@ rolü değiştirilemez; kimse kendi rolünü değiştiremez veya kendini çıkar
 Kısıtlı yönetici yalnızca kapsam grubuna bağlı görevlerde ve o grubun üyelerine atama yapabilir.
 
 ## Erişimin kaldırılması
-- **Gruptan çıkarma**: grup kaydı silinir → grup görevleri, grup bildirimleri (ileride mesaj ve dosyalar) RLS ile anında görünmez.
+- **Gruptan çıkarma**: grup kaydı silinir → grup görevleri, grup bildirimleri, **grup mesajları ve dosyaları** RLS ile anında görünmez (açık oturum ve Realtime dahil).
   Kişinin sorumlu/katkıda bulunan olduğu görevler görünmeye devam eder.
 - **Şirketten çıkarma**: üyelik `removed` olur, grup ve kapsam kayıtları silinir. Her sorgu aktif üyeliği kontrol ettiğinden
   açık oturum olsa bile (web, mobil, Realtime) erişim anında kesilir. Geçmiş kayıtlar silinmez; ad gösterimi korunur.

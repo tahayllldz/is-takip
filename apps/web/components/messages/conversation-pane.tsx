@@ -826,7 +826,9 @@ function ConvertToTaskDialog({
     if (name) firstLine = firstLine.split(`@${name}`).join('');
   }
   firstLine = firstLine.replace(/\s+/g, ' ').replace(/^[\s,.:;-]+/, '').trim();
-  const [title, setTitle] = useState(firstLine.slice(0, 120) || 'Mesajdan görev');
+  const [title, setTitle] = useState(
+    firstLine.slice(0, 120) || (message.attachments.some((a) => a.is_image) ? 'Fotoğraflı mesajdan görev' : message.attachments.length ? 'Dosyalı mesajdan görev' : 'Mesajdan görev'),
+  );
   const [assignee, setAssignee] = useState(ctx.userId);
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('normal');

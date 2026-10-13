@@ -157,17 +157,23 @@ export default function ConversationScreen() {
     setPending((list) => (list.some((p) => sent.has(p.clientRequestId)) ? list.filter((p) => !sent.has(p.clientRequestId)) : list));
   }, [messages]);
 
-  // Ekler için imzalı bağlantılar, görev bağlantıları
+  // Ekler için imzalı bağlantılar
   useEffect(() => {
     const paths = messages.flatMap((m) => (m.deleted_at ? [] : m.attachments.map((a) => a.storage_path))).filter((p) => !urls[p]);
     if (paths.length) signAttachmentUrls(supabase, paths, 600).then((u) => setUrls((x) => ({ ...x, ...u }))).catch(() => undefined);
-    if (tasksOn && messages.length) {
-      fetchMessageTasks(supabase, messages.map((m) => m.id))
-        .then((t) => setTasks(Object.fromEntries(t.map((x) => [x.source_message_id, x]))))
-        .catch(() => undefined);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, tasksOn]);
+  }, [messages]);
+
+  // Mesajdan oluşan görevler: ['tasks', şirket] altında → görev olayı (Realtime) gelince kendiliğinden yenilenir
+  const messageIds = messages.map((m) => m.id);
+  const messageTasksQ = useQuery({
+    queryKey: ['tasks', c.companyId ?? '-', 'from-messages', id, messageIds.length, messageIds[messageIds.length - 1] ?? ''],
+    queryFn: () => fetchMessageTasks(supabase, messageIds),
+    enabled: tasksOn && messageIds.length > 0,
+  });
+  useEffect(() => {
+    if (messageTasksQ.data) setTasks(Object.fromEntries(messageTasksQ.data.map((x) => [x.source_message_id, x])));
+  }, [messageTasksQ.data]);
 
   // Okundu: ekran açıkken ve uygulama ön plandayken
   const markRead = useCallback(() => {
@@ -715,7 +721,12 @@ function ConvertModal({
     const name = members.find((p) => p.id === mm.user_id)?.name;
     if (name) firstLine = firstLine.split(`@${name}`).join('');
   }
-  const [title, setTitle] = useState(firstLine.replace(/\s+/g, ' ').replace(/^[\s,.:;-]+/, '').trim().slice(0, 120) || 'Mesajdan görev');
+  const fallbackTitle = message.attachments.some((a) => a.is_image)
+    ? 'Fotoğraflı mesajdan görev'
+    : message.attachments.length
+      ? 'Dosyalı mesajdan görev'
+      : 'Mesajdan görev';
+  const [title, setTitle] = useState(firstLine.replace(/\s+/g, ' ').replace(/^[\s,.:;-]+/, '').trim().slice(0, 120) || fallbackTitle);
   const [assignee, setAssignee] = useState(myId);
   const [due, setDue] = useState<(typeof DUE_OPTIONS)[number]['key']>('none');
   const [priority, setPriority] = useState<TaskPriority>('normal');

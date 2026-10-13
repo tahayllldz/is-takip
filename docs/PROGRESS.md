@@ -1,5 +1,50 @@
 # İlerleme kaydı
 
+## 2026-10-13 — Aşama 2 (İletişim) tamamlandı ve doğrulandı
+
+### Yapılanlar
+- **Veritabanı** (`…0300_messaging.sql`): grup sohbeti (her grubun tek sohbeti, üyelik `group_members`'tan), birebir sohbet
+  (şirket içinde tekil), mesajlar (`client_request_id` ile tekil), @etiket (yalnızca konuşma üyeleri), ekler (özel
+  `message-attachments` kovası + `storage.objects` RLS), okundu bilgisi, mesaj silme/moderasyon, mesajdan göreve dönüştürme
+  (mesaj başına tek görev, kaynak mesaja bileşik FK), İletişim kapalıyken gizlilik kuralı, Realtime yayını.
+  İzinler: `messages.direct` (herkes), `messages.moderate` (sahip, yönetici, grup yöneticisi).
+- **Web**: `/mesajlar` (liste, okunmamış, birebir başlatma), sohbet (gün ayraçları, @etiket önerisi klavyeyle, fotoğraf/dosya,
+  imzalı bağlantı, silme, göreve dönüştürme diyaloğu, "Gönderilemedi · Tekrar dene", bekleyen mesajların sekme oturumunda
+  saklanması), menüde okunmamış sayısı, ana sayfa "Etiketlendiğim mesajlar", grup sayfasından sohbete, görev detayında kaynak mesaj,
+  bildirimden mesaja gitme.
+- **Mobil**: Mesajlar sekmesi (rozet), sohbet ekranı (@etiket önerileri, 📷 fotoğraf — HEIC→JPEG, 📎 dosya, "⋯ İşlemler" ile
+  göreve dönüştürme/silme, tekrar dene, bekleyen mesajlar cihazda), Bugün ekranında etiketler, bildirimden mesaja gitme.
+- Hata eşleme: ağ geçidi/servis kesintisi "Sunucuya şu anda ulaşılamıyor" olarak gösterilir.
+
+### Doğrulananlar (gerçekten çalıştırıldı)
+| Kontrol | Nasıl | Sonuç |
+|---|---|---|
+| Grup üyesi olmayan (şirket sahibi dahil) grup mesajlarını ve dosyalarını göremez, yazamaz | `60-messaging` (gömülü + gerçek Supabase), e2e | ✓ |
+| Başka şirket mesaj/dosya göremez, birebir sohbet açamaz, kaynak mesaj FK'si şirket sınırını aşamaz | `60-messaging`, e2e | ✓ |
+| Birebir sohbet yalnızca iki kişiye görünür; tekil (eşzamanlı dahil) | `60-messaging`, e2e | ✓ |
+| @etiket yalnızca konuşma üyelerine; bildirim yalnızca etiketlenene, tekrar denemede çoğalmaz; kendine bildirim yok | `60-messaging`, e2e, web arayüzü + veritabanı | ✓ |
+| Aynı mesaj yeniden gönderilince (yeniden bağlanma, eşzamanlı 4 deneme) tek kayıt | `60-messaging`, e2e | ✓ |
+| Gerçek Storage API: dosya yükleme, imzalı bağlantıyla indirme (içerik aynı), grup dışı/başka şirket indiremez, herkese açık bağlantı çalışmaz, desteklenmeyen tür reddedilir, mesaja bağlı dosya silinemez | e2e (`phase2-messaging`) | ✓ |
+| Mesajdan görev: grup ve kaynak mesaja bağlı, tekrar/eşzamanlı dönüştürme tek görev, mesaj sahibine bildirim, çalışan başkasına atayamaz | `60-messaging`, e2e, web + telefon | ✓ |
+| Gruptan/şirketten çıkarılan kişinin açık oturumunda mesaj ve dosya erişimi anında kesilir | `60-messaging`, e2e | ✓ |
+| İletişim kapalıyken okuma/yazma/yükleme engelli; arşiv yetkilisi yalnızca kendi konuşmasını görür; açınca geri gelir | `60-messaging` | ✓ |
+| Web: iki kullanıcı arasında canlı mesaj (ikinci kullanıcının sayfası yenilenmeden) | İki tarayıcı oturumu | ✓ |
+| Web: veritabanı API'si kapalıyken gönderim "Gönderilemedi — Sunucuya ulaşılamıyor"; sayfa yenilenince bekleyen mesaj geri geldi ve **tek kez** kaydedildi | PostgREST kapsayıcısı durdurulup açıldı | ✓ |
+| **Gerçek iPhone** (Expo Go, kablo): @etiketli mesaj webdeki Mehmet'e canlı ulaştı ve bildirim üretti; webden yazılan etiketli mesaj telefona dokunmadan geldi (kullanıcı beyanı); galeriden fotoğraf JPEG olarak yüklendi ve webde imzalı bağlantıyla açıldı; fotoğraf mesajı göreve dönüştürüldü | Veritabanı izlemesi + web + kullanıcı | ✓ |
+| Testler | `pnpm test:shared` 20, `pnpm test:db` 93 (gerçek Supabase'de 92 + 1 bilinçli atlama), `pnpm test:e2e` 15, `pnpm build:web`, istemci paketinde gizli anahtar yok | ✓ |
+
+### Doğrulanamayanlar / bilinen eksikler
+- **Android** cihaz denenmedi. Telefonda **dosya** (PDF) ekleme ve mesaj silme denenmedi (web ve testlerde doğrulandı).
+- Telefondan gelen fotoğraf 2,5 MB: yüklemeden önce küçültme yok (mobil veri için iyileştirilmeli).
+- Gönderilip mesaja bağlanmayan yüklemeler (vazgeçilen) kovada kalabilir; periyodik temizlik yok.
+- Mesaj düzenleme, okundu bilgisinin kişi bazında gösterimi, mesaj arama yok.
+- Realtime aboneliği sunucu tarafından reddedilirse kanal kendiliğinden yeniden abone olmuyor (odak/çevrimiçi olaylarında veri yenilenir).
+- Gerçek Supabase'de RLS testleri koşturulunca yerel veritabanında test şirketleri kalır (demo şirketini etkilemez).
+
+### Sıradaki somut adım
+**Aşama 3**: düzenlenebilir ana sayfa (şirket/rol varsayılanı + kişisel düzen; web sürükle-bırak + klavye, mobil yukarı/aşağı;
+web ve mobil ayrı), isteğe bağlı görev onayı (`task_approval`), gerçek cihazda push bildirimi.
+
 ## 2026-10-13 — Aşama 1 gerçek Supabase üzerinde doğrulandı
 
 Docker Desktop kuruldu; yerel Supabase (Postgres 17.11, Auth, PostgREST, Realtime, Storage) ayağa kalktı, iki migration hatasız uygulandı.

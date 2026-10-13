@@ -88,6 +88,8 @@ export function MessagesApp({
       ctx.companyId,
       ctx.userId,
       {
+        // Mesajdan görev oluşunca veya görevin durumu değişince açık sohbetteki görev bağlantıları güncellensin
+        onTasks: () => setPaneVersion((v) => v + 1),
         onMessages: (conversationId) => {
           void refreshList();
           if (!conversationId || conversationId === selectedRef.current) setPaneVersion((v) => v + 1);
