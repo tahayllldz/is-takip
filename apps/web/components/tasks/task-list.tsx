@@ -1,6 +1,6 @@
 import type { Task } from '@istakip/shared';
 import Link from 'next/link';
-import { DueBadge, PriorityBadge, StatusBadge } from '../ui';
+import { ApprovalBadge, DueBadge, PriorityBadge, StatusBadge } from '../ui';
 
 /** Görev listesi: her satır başlık, durum (metin+simge), sorumlu, son tarih ve grubu gösterir. */
 export function TaskList({
@@ -10,6 +10,7 @@ export function TaskList({
   groupName,
   showAssignee = true,
   showCreator = false,
+  approvalOn = false,
 }: {
   tasks: Task[];
   tz: string;
@@ -17,6 +18,8 @@ export function TaskList({
   groupName?: (id: string | null) => string | null;
   showAssignee?: boolean;
   showCreator?: boolean;
+  /** Görev onayı modülü açıksa onay durumu da gösterilir (kapalı modülün öğesi görünmez) */
+  approvalOn?: boolean;
 }) {
   return (
     <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
@@ -38,6 +41,7 @@ export function TaskList({
                 <PriorityBadge priority={t.priority} />
                 <DueBadge task={t} tz={tz} />
                 <StatusBadge status={t.status} />
+                {approvalOn && t.approval_status ? <ApprovalBadge status={t.approval_status} /> : null}
               </div>
             </Link>
           </li>

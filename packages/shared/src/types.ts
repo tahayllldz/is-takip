@@ -1,7 +1,7 @@
 /** Veritabanı satır tipleri (supabase/migrations ile birebir). */
 import type { AdminScope, GroupRole, Role } from './permissions';
 import type { ModuleId } from './modules';
-import type { TaskPriority, TaskStatus } from './tasks';
+import type { TaskApprovalStatus, TaskPriority, TaskStatus } from './tasks';
 
 export interface Company {
   id: string;
@@ -70,6 +70,13 @@ export interface Task {
   due_all_day: boolean;
   source_message_id: string | null;
   client_request_id: string;
+  requires_approval: boolean;
+  approver_id: string | null;
+  approval_status: TaskApprovalStatus | null;
+  approval_note: string | null;
+  approval_requested_at: string | null;
+  approval_decided_at: string | null;
+  approval_decided_by: string | null;
   notified_at: string | null;
   seen_at: string | null;
   accepted_at: string | null;

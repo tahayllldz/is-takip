@@ -14,7 +14,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AcceptButton, CommentForm, MarkSeen, StatusActions } from '@/components/tasks/task-actions';
 import { TaskForm } from '@/components/tasks/task-form';
-import { Alert, Avatar, Card, DueBadge, PriorityBadge, StatusBadge } from '@/components/ui';
+import { ApprovalDecision, ApprovalSettings } from '@/components/tasks/approval';
+import { Alert, ApprovalBadge, Avatar, Card, DueBadge, PriorityBadge, StatusBadge } from '@/components/ui';
 import { moduleOn, requireSession } from '@/lib/session';
 import { taskFormOptions } from '@/lib/task-form-data';
 
@@ -42,6 +43,16 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   const canStatus = tasksOn && (isAssignee || canManage);
   const assigneeRemoved = s.members.find((m) => m.user_id === task.assignee_id)?.status === 'removed';
 
+  // Görev onayı (arayüz kararı; kesin kontrol approve_task / request_task_changes içinde)
+  const approvalOn = tasksOn && moduleOn(s, 'task_approval');
+  const approverRemoved = task.approver_id ? s.members.find((m) => m.user_id === task.approver_id)?.status !== 'active' : false;
+  const canDecide =
+    approvalOn &&
+    task.approval_status === 'pending' &&
+    s.userId !== task.assignee_id &&
+    ((task.approver_id === s.userId && s.can('tasks.approve', task.group_id)) ||
+      (approverRemoved && s.can('tasks.approve', task.group_id) && s.can('tasks.manage_all', task.group_id)));
+
   // Etiketlenebilecek kişiler: görevi görebilen katılımcılar (sunucu ayrıca doğrular)
   const participantIds = new Set<string>([task.assignee_id, task.created_by, ...contributorIds, ...(group?.members.map((m) => m.user_id) ?? [])]);
   participantIds.delete(s.userId);
@@ -50,6 +61,16 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
     .map((m) => ({ id: m.user_id, name: s.nameOf(m.user_id) }));
 
   const editOpts = canManage ? await taskFormOptions(s) : null;
+  const approverCandidates = (() => {
+    const ids = new Set(
+      s.members
+        .filter((m) => m.status === 'active' && (m.role === 'owner' || (m.role === 'admin' && m.admin_scope === 'company')))
+        .map((m) => m.user_id),
+    );
+    for (const gm of group?.members ?? []) if (gm.role === 'manager') ids.add(gm.user_id);
+    ids.delete(task.assignee_id);
+    return [...ids].map((id) => ({ id, name: s.nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  })();
 
   return (
     <>
@@ -79,7 +100,13 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
             <DueBadge task={task} tz={s.timezone} />
+            {approvalOn && task.approval_status ? <ApprovalBadge status={task.approval_status} /> : null}
           </div>
+          {approvalOn && task.approval_status === 'changes_requested' && task.approval_note ? (
+            <p className="mt-2 rounded-xl border border-[#f1b8b2] bg-danger-soft px-3 py-2">
+              <strong>Düzeltme istendi ({s.nameOf(task.approval_decided_by)}):</strong> {task.approval_note}
+            </p>
+          ) : null}
           {task.status === 'on_hold' && task.hold_reason ? (
             <p className="mt-2">
               <strong>Beklemede nedeni:</strong> {task.hold_reason}
@@ -95,6 +122,39 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
               <div className="space-y-3">
                 <StatusActions taskId={task.id} status={task.status} version={task.version} />
                 {isAssignee && !task.accepted_at && task.status !== 'done' ? <AcceptButton taskId={task.id} /> : null}
+              </div>
+            </Card>
+          ) : null}
+
+          {approvalOn && (task.requires_approval || canManage) ? (
+            <Card title="Onay">
+              <div className="space-y-3">
+                {task.requires_approval ? (
+                  <p>
+                    Onaylayacak kişi: <strong>{s.nameOf(task.approver_id)}</strong>
+                    {approverRemoved ? <span className="ml-1 text-danger">(şirketten ayrıldı)</span> : null}
+                    {' · '}
+                    {task.approval_status ? <ApprovalBadge status={task.approval_status} /> : <span className="text-muted">Görev tamamlanınca onaya düşer.</span>}
+                  </p>
+                ) : (
+                  <p className="text-muted">Bu görev onay gerektirmiyor.</p>
+                )}
+                {canDecide ? <ApprovalDecision taskId={task.id} /> : null}
+                {task.approval_status === 'pending' && !canDecide ? <p className="text-muted">Onaylayıcının kararı bekleniyor.</p> : null}
+                {canManage ? (
+                  <details>
+                    <summary className="cursor-pointer font-semibold text-brand">Onay ayarını değiştir</summary>
+                    <div className="mt-2">
+                      <ApprovalSettings
+                        taskId={task.id}
+                        requiresApproval={task.requires_approval}
+                        approverId={task.approver_id}
+                        candidates={approverCandidates}
+                        me={s.userId}
+                      />
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </Card>
           ) : null}

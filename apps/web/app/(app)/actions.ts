@@ -7,6 +7,8 @@
 import {
   acceptTask,
   addGroupMembers,
+  approvalNoteSchema,
+  approveTask,
   addTaskComment,
   archiveGroup,
   changeMemberRole,
@@ -21,9 +23,11 @@ import {
   markTaskSeen,
   removeGroupMember,
   removeMember,
+  requestTaskChanges,
   revokeInvitation,
   setGroupMemberRole,
   setModuleEnabled,
+  setTaskApproval,
   setTaskStatus,
   statusChangeSchema,
   taskCreateSchema,
@@ -108,6 +112,8 @@ export async function createTaskAction(_p: ActionState, form: FormData): Promise
     priority: str(form, 'priority') || 'normal',
     groupId: opt(form, 'groupId'),
     clientRequestId: str(form, 'clientRequestId'),
+    requiresApproval: form.get('requiresApproval') === 'on',
+    approverId: opt(form, 'approverId'),
   });
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
   let taskId: string;
@@ -161,6 +167,43 @@ export async function acceptTaskAction(_p: ActionState, form: FormData): Promise
   try {
     await acceptTask(s.supabase, str(form, 'taskId'));
     return done('Görevi üstlendiniz.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Görev onayı
+// ---------------------------------------------------------------------
+
+export async function approveTaskAction(_p: ActionState, form: FormData): Promise<ActionState> {
+  const s = await requireSession();
+  try {
+    await approveTask(s.supabase, str(form, 'taskId'));
+    return done('Görev onaylandı; sorumluya bildirildi.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function requestChangesAction(_p: ActionState, form: FormData): Promise<ActionState> {
+  const s = await requireSession();
+  const note = approvalNoteSchema.safeParse(str(form, 'note'));
+  if (!note.success) return { fieldErrors: { note: note.error.issues[0]?.message ?? 'Açıklama yazın.' } };
+  try {
+    await requestTaskChanges(s.supabase, str(form, 'taskId'), note.data);
+    return done('Düzeltme istendi; görev yeniden "Devam ediyor" oldu ve sorumluya açıklamanız gönderildi.');
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function setTaskApprovalAction(_p: ActionState, form: FormData): Promise<ActionState> {
+  const s = await requireSession();
+  const requires = form.get('requiresApproval') === 'on';
+  try {
+    await setTaskApproval(s.supabase, str(form, 'taskId'), requires, requires ? opt(form, 'approverId') : null);
+    return done(requires ? 'Onay ayarı kaydedildi.' : 'Bu görev artık onay gerektirmiyor.');
   } catch (e) {
     return fail(e);
   }

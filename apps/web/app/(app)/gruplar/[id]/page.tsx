@@ -56,7 +56,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           <Card title={`Açık görevler (${tasks.length})`}>
-            {tasks.length ? <TaskList tasks={tasks} tz={s.timezone} nameOf={s.nameOf} showCreator /> : <EmptyState title="Bu grupta açık görev yok" />}
+            {tasks.length ? <TaskList approvalOn={moduleOn(s, 'task_approval')} tasks={tasks} tz={s.timezone} nameOf={s.nameOf} showCreator /> : <EmptyState title="Bu grupta açık görev yok" />}
           </Card>
           <Card title={`Üyeler (${group.members.length})`}>
             <ul className="divide-y divide-line">

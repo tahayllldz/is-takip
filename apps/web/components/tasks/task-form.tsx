@@ -17,6 +17,7 @@ export interface GroupOption {
   id: string;
   name: string;
   memberIds: string[];
+  managerIds: string[];
 }
 
 interface Defaults {
@@ -42,6 +43,9 @@ interface Props {
   taskId?: string;
   version?: number;
   defaults?: Defaults;
+  /** Görev onayı modülü açık mı (yalnızca oluşturma formunda kullanılır) */
+  approvalOn?: boolean;
+  companyApproverIds?: string[];
 }
 
 export function TaskForm(props: Props) {
@@ -52,6 +56,8 @@ export function TaskForm(props: Props) {
   const [assigneeId, setAssigneeId] = useState<string>(defaults.assigneeId ?? me);
   const [contributors, setContributors] = useState<string[]>(defaults.contributorIds ?? []);
   const [showMore, setShowMore] = useState(Boolean(defaults.description || (defaults.contributorIds?.length ?? 0) > 0));
+  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [approverId, setApproverId] = useState('');
 
   // Atanabilir kişiler: şirket geneli yetkide herkes; grup kapsamlı yetkide seçili grubun üyeleri; aksi halde yalnızca kendisi.
   const assignable = useMemo(() => {
@@ -63,6 +69,15 @@ export function TaskForm(props: Props) {
 
   const canAssignOthers = canAssignAnywhere || assignableGroupIds.length > 0;
   const effectiveAssignee = assignable.some((p) => p.id === assigneeId) ? assigneeId : me;
+
+  // Onaylayıcı adayları: sahip/şirket geneli yöneticiler + seçili grubun yöneticileri; sorumlu hariç
+  const approvers = useMemo(() => {
+    const g = groups.find((x) => x.id === groupId);
+    const ids = new Set([...(props.companyApproverIds ?? []), ...(g?.managerIds ?? [])]);
+    ids.delete(effectiveAssignee);
+    return people.filter((p) => ids.has(p.id));
+  }, [groups, groupId, props.companyApproverIds, effectiveAssignee, people]);
+  const effectiveApprover = approvers.some((p) => p.id === approverId) ? approverId : (approvers.find((p) => p.id === me)?.id ?? approvers[0]?.id ?? '');
 
   return (
     <form {...formProps} className="space-y-5" noValidate>
@@ -170,6 +185,32 @@ export function TaskForm(props: Props) {
           ) : null}
         </>
       )}
+
+      {mode === 'create' && props.approvalOn ? (
+        <fieldset className="rounded-xl border border-line p-3">
+          <legend className="px-1 font-semibold">Onay</legend>
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" name="requiresApproval" className="h-5 w-5" checked={requiresApproval} onChange={(e) => setRequiresApproval(e.target.checked)} />
+            Tamamlanınca onay gerekli
+          </label>
+          <p className="hint">Sorumlu görevi tamamlayınca seçtiğiniz kişi onaylar ya da açıklama yazarak düzeltme ister.</p>
+          {requiresApproval ? (
+            approvers.length ? (
+              <Field id="approverId" label="Onaylayacak kişi" error={fe.approverId}>
+                <select {...fieldProps('approverId', fe.approverId)} className="input" value={effectiveApprover} onChange={(e) => setApproverId(e.target.value)}>
+                  {approvers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id === me ? `${p.name} (ben)` : p.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <p role="alert" className="field-error">Bu görev için onaylayabilecek kimse yok (sorumlu kendi görevini onaylayamaz).</p>
+            )
+          ) : null}
+        </fieldset>
+      ) : null}
 
       <FormMessage state={state} />
       <div className="flex gap-2">

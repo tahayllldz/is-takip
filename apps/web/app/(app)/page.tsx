@@ -102,7 +102,7 @@ export default async function HomePage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="Bugünkü işlerim" actions={<a className="font-semibold text-brand underline" href="/gorevler?g=mine">Tümü</a>}>
           {today.length ? (
-            <TaskList tasks={today} tz={s.timezone} nameOf={s.nameOf} showAssignee={false} showCreator />
+            <TaskList approvalOn={moduleOn(s, 'task_approval')} tasks={today} tz={s.timezone} nameOf={s.nameOf} showAssignee={false} showCreator />
           ) : (
             <EmptyState title="Bugün için bekleyen işiniz yok">Son tarihi bugün veya geçmiş açık göreviniz bulunmuyor.</EmptyState>
           )}
@@ -110,7 +110,7 @@ export default async function HomePage() {
 
         <Card title={canSeeTeam ? 'Geciken işler (ekip)' : 'Geciken işlerim'} actions={<a className="font-semibold text-brand underline" href="/gorevler?g=overdue">Tümü</a>}>
           {overdue.length ? (
-            <TaskList tasks={overdue} tz={s.timezone} nameOf={s.nameOf} showCreator />
+            <TaskList approvalOn={moduleOn(s, 'task_approval')} tasks={overdue} tz={s.timezone} nameOf={s.nameOf} showCreator />
           ) : (
             <EmptyState title="Geciken iş yok" />
           )}
@@ -121,7 +121,7 @@ export default async function HomePage() {
         {created.length || s.can('tasks.assign') || s.scopeGroupIds.length ? (
           <Card title="Verdiğim işler" actions={<a className="font-semibold text-brand underline" href="/gorevler?g=created">Tümü</a>}>
             {created.length ? (
-              <TaskList tasks={created} tz={s.timezone} nameOf={s.nameOf} />
+              <TaskList approvalOn={moduleOn(s, 'task_approval')} tasks={created} tz={s.timezone} nameOf={s.nameOf} />
             ) : (
               <EmptyState title="Başkasına verdiğiniz açık iş yok" action={<ButtonLink href="/gorevler/yeni" variant="secondary">Görev ver</ButtonLink>} />
             )}

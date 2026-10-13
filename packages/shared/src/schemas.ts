@@ -4,7 +4,7 @@
  * fonksiyonları aynı kuralları ayrıca uygular.
  */
 import { z } from 'zod';
-import { HOLD_REASON_MAX, HOLD_REASON_MIN, TASK_PRIORITIES, TASK_STATUSES } from './tasks';
+import { APPROVAL_NOTE_MAX, APPROVAL_NOTE_MIN, HOLD_REASON_MAX, HOLD_REASON_MIN, TASK_PRIORITIES, TASK_STATUSES } from './tasks';
 
 const id = () => z.guid({ error: 'Geçersiz kimlik.' });
 
@@ -84,14 +84,23 @@ export const taskCreateSchema = z
     groupId: id().nullish(),
     clientRequestId: id(),
     sourceMessageId: id().nullish(),
+    /** Görev onayı modülü: tamamlanınca onaylayıcının onayı gerekir */
+    requiresApproval: z.boolean().default(false),
+    approverId: id().nullish(),
   })
   .refine((v) => !(v.dueTime && !v.dueDate), { error: 'Saat seçtiyseniz tarih de seçin.', path: ['dueDate'] })
+  .refine((v) => !v.requiresApproval || Boolean(v.approverId), { error: 'Onaylayacak kişiyi seçin.', path: ['approverId'] })
+  .refine((v) => !v.requiresApproval || v.approverId !== v.assigneeId, {
+    error: 'Görevin sorumlusu kendi görevini onaylayamaz.',
+    path: ['approverId'],
+  })
   .refine((v) => !v.contributorIds.includes(v.assigneeId), {
     error: 'Ana sorumlu aynı zamanda katkıda bulunan olamaz.',
     path: ['contributorIds'],
   });
 
-export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
+/** Giriş tipi: varsayılanı olan alanlar (açıklama, katkıda bulunanlar, öncelik, onay) isteğe bağlı */
+export type TaskCreateInput = z.input<typeof taskCreateSchema>;
 
 export const taskUpdateSchema = z.object({
   taskId: id(),
@@ -115,6 +124,12 @@ export const statusChangeSchema = z
     error: 'Beklemeye alırken kısa bir neden yazın.',
     path: ['reason'],
   });
+
+export const approvalNoteSchema = z
+  .string()
+  .trim()
+  .min(APPROVAL_NOTE_MIN, { error: 'Neyin düzeltilmesi gerektiğini kısaca yazın.' })
+  .max(APPROVAL_NOTE_MAX, { error: `En fazla ${APPROVAL_NOTE_MAX} karakter yazabilirsiniz.` });
 
 export const commentSchema = z.object({
   taskId: id(),

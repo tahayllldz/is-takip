@@ -25,9 +25,12 @@ afterAll(() => db.close());
 describe('görev modülü kapalıyken', () => {
   it('çalışan modülü kapatamaz; yönetici kapatabilir ve işlem geçmişine yazılır', async () => {
     await expectDenied(db.rpc(emp, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: false }), { hint: 'forbidden' });
+    // Bağımlılık: Görev onayı açıkken Görevler kapatılamaz
+    await expectDenied(db.rpc(admin, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: false }), { hint: 'invalid' });
+    await db.rpc(admin, 'set_module_enabled', { p_company: company, p_module: 'task_approval', p_enabled: false });
     await db.rpc(admin, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: false });
     const log = await db.query(owner, `select action from public.audit_log where company_id = $1 and action = 'module.disabled'`, [company]);
-    expect(log.length).toBe(1);
+    expect(log.length).toBe(2);
   });
 
   it('doğrudan API/RPC isteğiyle yeni görev, durum değişikliği, yorum yapılamaz', async () => {
@@ -59,7 +62,10 @@ describe('görev modülü kapalıyken', () => {
   });
 
   it('yeniden açılınca mevcut veriler kullanılabilir', async () => {
+    // Bağımlılık: Görevler kapalıyken Görev onayı açılamaz
+    await expectDenied(db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'task_approval', p_enabled: true }), { hint: 'invalid' });
     await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: true });
+    await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'task_approval', p_enabled: true });
     expect((await db.query(emp, 'select id from public.tasks where id = $1', [taskId])).length).toBe(1);
     const done = await db.rpcOne(emp, 'set_task_status', { p_task: taskId, p_status: 'done' });
     expect(done.status).toBe('done');

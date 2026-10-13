@@ -408,6 +408,7 @@ describe('İletişim modülü kapalıyken', () => {
 
   it('Görevler kapalıyken mesajlaşma çalışır ama mesajdan görev oluşturulamaz', async () => {
     const m = await send(ayse, groupConv, 'Görevler kapalıyken mesaj');
+    await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'task_approval', p_enabled: false });
     await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: false });
     try {
       await expectDenied(
@@ -417,6 +418,7 @@ describe('İletişim modülü kapalıyken', () => {
       await send(mehmet, groupConv, 'mesajlaşma devam ediyor');
     } finally {
       await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'tasks', p_enabled: true });
+      await db.rpc(owner, 'set_module_enabled', { p_company: company, p_module: 'task_approval', p_enabled: true });
     }
   });
 });

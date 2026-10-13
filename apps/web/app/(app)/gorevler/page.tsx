@@ -90,7 +90,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               : 'Filtreyi değiştirmeyi deneyin.'}
         </EmptyState>
       ) : (
-        <TaskList tasks={tasks} tz={s.timezone} nameOf={s.nameOf} groupName={groupName} showCreator={tab !== 'created'} />
+        <TaskList approvalOn={moduleOn(s, 'task_approval')} tasks={tasks} tz={s.timezone} nameOf={s.nameOf} groupName={groupName} showCreator={tab !== 'created'} />
       )}
     </>
   );

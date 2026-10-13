@@ -31,6 +31,19 @@ export const TASK_PRIORITY_META: Record<TaskPriority, { label: string; symbol: s
   urgent: { label: 'Acil', symbol: '‼', tone: 'danger' },
 };
 
+export const TASK_APPROVAL_STATUSES = ['pending', 'approved', 'changes_requested'] as const;
+export type TaskApprovalStatus = (typeof TASK_APPROVAL_STATUSES)[number];
+
+/** Onay durumu "tamamlandı"dan ayrıdır: iş yapıldı ≠ iş kabul edildi. */
+export const TASK_APPROVAL_META: Record<TaskApprovalStatus, { label: string; symbol: string; tone: Tone }> = {
+  pending: { label: 'Onay bekliyor', symbol: '⏳', tone: 'warning' },
+  approved: { label: 'Onaylandı', symbol: '✔', tone: 'success' },
+  changes_requested: { label: 'Düzeltme istendi', symbol: '↩', tone: 'danger' },
+};
+
+export const APPROVAL_NOTE_MIN = 3;
+export const APPROVAL_NOTE_MAX = 500;
+
 export const HOLD_REASON_MIN = 3;
 export const HOLD_REASON_MAX = 300;
 

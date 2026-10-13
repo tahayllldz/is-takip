@@ -314,8 +314,40 @@ export async function createTask(c: Client, input: TaskCreateInput): Promise<Tas
         p_due_time: input.dueTime ?? null,
         p_priority: input.priority ?? 'normal',
         p_group: input.groupId ?? null,
+        p_requires_approval: input.requiresApproval ?? false,
+        p_approver: input.requiresApproval ? (input.approverId ?? null) : null,
       })
       .single(),
+  );
+}
+
+// ---------------------------------------------------------------------
+// Görev onayı (task_approval modülü)
+// ---------------------------------------------------------------------
+
+export async function setTaskApproval(c: Client, taskId: string, requiresApproval: boolean, approverId?: string | null): Promise<Task> {
+  return run(c.rpc('set_task_approval', { p_task: taskId, p_requires_approval: requiresApproval, p_approver: approverId ?? null }).single());
+}
+
+export async function approveTask(c: Client, taskId: string): Promise<Task> {
+  return run(c.rpc('approve_task', { p_task: taskId }).single());
+}
+
+export async function requestTaskChanges(c: Client, taskId: string, note: string): Promise<Task> {
+  return run(c.rpc('request_task_changes', { p_task: taskId, p_note: note }).single());
+}
+
+/** Onayımı bekleyen görevler (RLS: onaylayıcı görevi görebilir) */
+export async function fetchAwaitingMyApproval(c: Client, companyId: string, userId: string, limit = 50): Promise<Task[]> {
+  return run(
+    c
+      .from('tasks')
+      .select(TASK_COLUMNS)
+      .eq('company_id', companyId)
+      .eq('approver_id', userId)
+      .eq('approval_status', 'pending')
+      .order('approval_requested_at', { ascending: true })
+      .limit(limit),
   );
 }
 

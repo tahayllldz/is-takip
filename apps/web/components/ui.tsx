@@ -3,10 +3,12 @@
  * Durumlar yalnızca renkle anlatılmaz: her rozet metin + ayrı bir simge içerir.
  */
 import {
+  TASK_APPROVAL_META,
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   dueLabel,
   dueState,
+  type TaskApprovalStatus,
   type TaskPriority,
   type TaskStatus,
   type TaskTiming,
@@ -34,6 +36,15 @@ export function Badge({ tone = 'neutral', symbol, children }: { tone?: Tone; sym
 
 export function StatusBadge({ status }: { status: TaskStatus }) {
   const m = TASK_STATUS_META[status];
+  return (
+    <Badge tone={m.tone} symbol={m.symbol}>
+      {m.label}
+    </Badge>
+  );
+}
+
+export function ApprovalBadge({ status }: { status: TaskApprovalStatus }) {
+  const m = TASK_APPROVAL_META[status];
   return (
     <Badge tone={m.tone} symbol={m.symbol}>
       {m.label}
