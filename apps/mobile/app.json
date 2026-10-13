@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "İş Takip",
+    "slug": "istakip",
+    "scheme": "istakip",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.istakip.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.istakip.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

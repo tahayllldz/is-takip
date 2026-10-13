@@ -1,0 +1,135 @@
+@import 'tailwindcss';
+
+/*
+ * Tasarım ilkeleri: açık zemin, yumuşak köşeler, okunabilir (en az 16px) yazı,
+ * belirgin butonlar (en az 44px yükseklik), görünür klavye odağı, gereksiz animasyon yok.
+ * Durum renkleri her zaman metin + simgeyle birlikte kullanılır.
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-line: #dfe3e8;
+  --color-ink: #17202b;
+  --color-muted: #4a5664;
+  --color-brand: #1d5fd1;
+  --color-brand-strong: #164aa6;
+  --color-brand-soft: #e8f0fd;
+
+  --color-ok: #146c43;
+  --color-ok-soft: #e3f4ea;
+  --color-warn: #8a5300;
+  --color-warn-soft: #fff3dc;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-info: #1d5fd1;
+  --color-info-soft: #e8f0fd;
+  --color-neutral-soft: #eef1f4;
+
+  --radius-card: 1rem;
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-brand);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-strong);
+  }
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border-color: var(--color-line);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-neutral-soft);
+  }
+  .btn-danger {
+    background: var(--color-surface);
+    color: var(--color-danger);
+    border-color: #f1b8b2;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--color-danger-soft);
+  }
+  .btn-sm {
+    min-height: 2.25rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.9375rem;
+  }
+  .input {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #b9c1cb;
+    border-radius: 0.75rem;
+    background: #fff;
+    color: var(--color-ink);
+  }
+  .input[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
+  .label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  .hint {
+    font-size: 0.9375rem;
+    color: var(--color-muted);
+  }
+  .field-error {
+    font-size: 0.9375rem;
+    color: var(--color-danger);
+    margin-top: 0.25rem;
+  }
+}

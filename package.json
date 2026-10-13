@@ -1,0 +1,27 @@
+{
+  "name": "istakip",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @istakip/web dev",
+    "dev:mobile": "pnpm --filter @istakip/mobile start",
+    "build:web": "pnpm --filter @istakip/web build",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "pnpm -r test",
+    "test:shared": "pnpm --filter @istakip/shared test",
+    "test:db": "pnpm --filter @istakip/db-tests test",
+    "test:e2e": "pnpm --filter @istakip/db-tests e2e",
+    "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor",
+    "db:stop": "supabase stop",
+    "db:status": "supabase status",
+    "db:reset": "supabase db reset",
+    "db:seed-demo": "pnpm --filter @istakip/db-tests seed-demo"
+  },
+  "devDependencies": {
+    "supabase": "2.120.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,23 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Expo SDK 57'nin sabitlediği React Native araç sürümleri (pnpm eş bağımlılıkları
+# otomatik kurarken en yeni sürümü seçmesin; tek RN sürümü desteklenir).
+overrides:
+  "react-native": 0.86.3
+  "react": 19.2.3
+  "react-dom": 19.2.3
+
+# Kurulum betiği çalıştırmasına izin verilen paketler (pnpm 10 varsayılan olarak engeller).
+onlyBuiltDependencies:
+  - supabase
+  - embedded-postgres
+  - "@embedded-postgres/windows-x64"
+  - "@embedded-postgres/linux-x64"
+  - "@embedded-postgres/darwin-arm64"
+  - "@embedded-postgres/darwin-x64"
+  - sharp
+  - esbuild
+  - unrs-resolver
+  - "@tailwindcss/oxide"

@@ -1,0 +1,25 @@
+{
+  "name": "@istakip/db-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.db.config.ts",
+    "e2e": "vitest run --config vitest.e2e.config.ts",
+    "seed-demo": "tsx src/seed-demo.ts"
+  },
+  "dependencies": {
+    "@istakip/shared": "workspace:*",
+    "@supabase/supabase-js": "2.117.3",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.0.4"
+  }
+}

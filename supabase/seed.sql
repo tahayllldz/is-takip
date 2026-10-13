@@ -1,0 +1,6 @@
+-- Bu dosya `supabase db reset` sırasında çalışır ve bilerek boştur.
+-- Gerçek çalışma modunda veritabanına hiçbir örnek veri eklenmez.
+--
+-- Demo verisi (tamamen sentetik, "DEMO" işaretli şirket) ayrı bir komutla
+-- ve gerçek Auth API'si üzerinden oluşturulur:
+--   pnpm db:seed-demo

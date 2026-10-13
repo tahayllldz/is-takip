@@ -1,0 +1,35 @@
+node_modules/
+.pnpm-store/
+
+# Ortam değişkenleri (anahtarlar asla depoya girmez)
+.env
+.env.local
+.env.*.local
+apps/web/.env.local
+apps/mobile/.env
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/next-env.d.ts
+*.tsbuildinfo
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+apps/mobile/ios/
+apps/mobile/android/
+
+# Supabase yerel durum
+supabase/.branches/
+supabase/.temp/
+
+# Test geçici dosyaları
+packages/db-tests/.pgdata/
+test-results/
+playwright-report/
+coverage/
+
+.DS_Store
+Thumbs.db
