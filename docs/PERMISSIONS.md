@@ -27,6 +27,7 @@ mantığın kopyasıyla buton göster/gizle kararı verir.
 | `audit.view` İşlem geçmişi | Temel | Şirket | ✓ | ✓ | — | — |
 | `archive.view` Kapalı modül verisini salt okunur görme | Temel | Şirket | ✓ | ✓ | — | — |
 | `dashboard.manage_defaults` Varsayılan ana sayfa | Temel | Şirket | ✓ | ✓ | — | — |
+| `branding.manage` Şirket logosu ve uygulama renkleri | Temel | Şirket | ✓ | ✓ | — | — |
 | `tasks.create` Kendine görev oluşturma | Görevler | Şirket | ✓ | ✓ | ✓ | — |
 | `tasks.assign` Başkasına görev atama | Görevler | Grup | ✓ | ✓ | — | — |
 | `tasks.view_all` Kapsamdaki tüm görevleri görme | Görevler | Grup | ✓ | ✓ | — | — |
@@ -53,6 +54,16 @@ rolü değiştirilemez; kimse kendi rolünü değiştiremez veya kendini çıkar
 |---|---|
 | Kendi düzenini değiştirmek (web ve mobil ayrı) | Herkes; izni olmadığı bileşeni (ekip özeti) ekleyemez |
 | Rol/platform varsayılanı belirlemek | `dashboard.manage_defaults` (sahip, yönetici); rolün göremeyeceği bileşen eklenemez |
+
+## Marka teması (logo ve renkler)
+| İşlem | Kim |
+|---|---|
+| Temayı görmek (uygulama o renklerle açılır), logoyu indirmek | Şirketin her aktif üyesi; logo kısa süreli imzalı bağlantıyla, kova herkese açık değil |
+| Logo yüklemek, tema kaydetmek, sıfırlamak | `branding.manage` (sahip ve "Tüm şirket" kapsamlı yönetici); yalnızca grup kapsamlı yönetici değiştiremez |
+| Logo dosyası | Yalnızca `<şirket>/logo-<uuid>.png` yoluna, PNG/JPEG, en fazla 2 MB; kullanımdaki logo silinemez |
+
+Sunucu temanın biçimini de doğrular (renkler `#rrggbb`, bilinen hedefler ve her hedefe izinli renkler, başka şirketin logosu
+veya yüklenmemiş dosya kabul edilmez) ve eşzamanlı düzenlemede eski sürümle kaydı reddeder (`conflict`).
 
 ## Push bildirimleri
 | İşlem | Kim |

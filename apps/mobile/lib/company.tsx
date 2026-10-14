@@ -3,12 +3,14 @@
  * arayüz izin hesabı. Realtime aboneliği burada kurulur.
  */
 import {
+  fetchCompanyBranding,
   fetchEnabledModules,
   fetchMembers,
   fetchMyMemberships,
   fetchPermissionContext,
   hasPermission,
   subscribeCompanyChanges,
+  type CompanyBranding,
   type Member,
   type MembershipWithCompany,
   type ModuleId,
@@ -31,6 +33,10 @@ export interface CompanyContext {
   timezone: string;
   members: Member[];
   enabledModules: ModuleId[];
+  /** Şirket teması; kayıt yoksa veya alınamadıysa null (uygulamanın kendi teması) */
+  branding: CompanyBranding | null;
+  /** Tema alınamadı (uygulama yine çalışır; düzenleyici bunu gösterir) */
+  brandingError: unknown;
   loading: boolean;
   error: unknown;
   live: boolean;
@@ -77,6 +83,15 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Tema: ayrı sorgu; hata uygulamayı engellemez (tek yeniden deneme, sonra uygulamanın kendi teması)
+  const brandingQ = useQuery({
+    queryKey: keys.branding(companyId ?? '-'),
+    enabled: Boolean(companyId && userId),
+    queryFn: () => fetchCompanyBranding(supabase, companyId!),
+    retry: 1,
+    staleTime: 5 * 60_000,
+  });
+
   // Realtime: görev/bildirim değişince ilgili sorguları yenile; yeniden bağlanınca hepsini yenile.
   useEffect(() => {
     if (!companyId || !userId) return;
@@ -95,6 +110,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         void qc.invalidateQueries({ queryKey: keys.mentions(companyId) });
         void qc.invalidateQueries({ queryKey: conversationId ? keys.messages(conversationId) : ['messages'] });
       },
+      onBranding: () => void qc.invalidateQueries({ queryKey: keys.branding(companyId) }),
       onLive: (s) => {
         setLive(s === 'live');
         // Akış hazır olunca (ilk bağlantı ve yeniden bağlanma) arada kaçırılanları al
@@ -131,7 +147,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       timezone: active?.company.timezone ?? 'Asia/Famagusta',
       members,
       enabledModules,
-      loading: membershipsQ.isLoading || (Boolean(companyId) && companyQ.isLoading),
+      branding: brandingQ.data ?? null,
+      brandingError: brandingQ.error,
+      // Tema da beklenir: aksi hâlde uygulama bir an varsayılan renklerle açılıp marka rengine geçerdi
+      loading: membershipsQ.isLoading || (Boolean(companyId) && (companyQ.isLoading || brandingQ.isLoading)),
       error: membershipsQ.error ?? companyQ.error,
       live,
       can: (p, g) => hasPermission(perm, p, { groupId: g, enabledModules }),
@@ -144,7 +163,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         void companyQ.refetch();
       },
     };
-  }, [userId, memberships, active, companyId, companyQ, membershipsQ, live, setActive]);
+  }, [userId, memberships, active, companyId, companyQ, membershipsQ, brandingQ.data, brandingQ.error, brandingQ.isLoading, live, setActive]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

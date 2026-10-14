@@ -146,14 +146,22 @@ export function ensureContrast(fg: string, bg: string, min = 4.5): string {
 }
 
 /**
- * Dolgulu öğe (düğme, rozet): metin rengi zemine göre seçilir; ikisi de yetmezse
- * zemin metinden uzaklaştırılır (koyulaştırılır/açılır).
+ * Dolgulu öğe (düğme, rozet): metin rengi zemine göre seçilir. Beyaz yazı yetmiyor ama sınıra yakınsa
+ * (orta tonlu marka renkleri, ör. turkuaz) zemini biraz koyulaştırıp beyaz yazı tercih edilir — marka düğmelerinde
+ * alışılmış görünüm budur. Hiçbiri yetmezse zemin, daha az değişiklik gerektiren yöne kaydırılır.
  */
 export function ensureFill(bg: string, min = 4.5): { bg: string; fg: string; adjusted: boolean } {
-  const fg = readableOn(bg);
-  if (contrastRatio(fg, bg) >= min) return { bg, fg, adjusted: false };
-  const adjusted = ensureContrast(bg, fg, min);
-  return { bg: adjusted, fg, adjusted: adjusted !== bg };
+  const onWhite = contrastRatio(WHITE, bg);
+  const onInk = contrastRatio(INK, bg);
+  if (onWhite >= min) return { bg, fg: WHITE, adjusted: false };
+  if (onInk >= min && onWhite < 3) return { bg, fg: INK, adjusted: false };
+  const l = hexToHsl(bg).l;
+  const darker = ensureContrast(bg, WHITE, min);
+  const dDark = Math.abs(hexToHsl(darker).l - l);
+  if (onInk >= min) return dDark <= 0.08 ? { bg: darker, fg: WHITE, adjusted: true } : { bg, fg: INK, adjusted: false };
+  const lighter = ensureContrast(bg, INK, min);
+  const dLight = Math.abs(hexToHsl(lighter).l - l);
+  return dDark <= dLight + 0.04 ? { bg: darker, fg: WHITE, adjusted: true } : { bg: lighter, fg: INK, adjusted: true };
 }
 
 // =====================================================================

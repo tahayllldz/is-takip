@@ -39,6 +39,17 @@ const rgba = (hex: string, a = 255): [number, number, number, number] => {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255, a];
 };
 
+/** Test için base64 kodlayıcı (paket Node tiplerine bağımlı olmasın) */
+function toBase64(bytes: Uint8Array): string {
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i]! << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0);
+    out += A[(n >> 18) & 63]! + A[(n >> 12) & 63]! + (i + 1 < bytes.length ? A[(n >> 6) & 63]! : '=') + (i + 2 < bytes.length ? A[n & 63]! : '=');
+  }
+  return out;
+}
+
 /** Basit belirlenimci rastgele sayı üreteci (testler her çalıştırmada aynı) */
 function rng(seed: number) {
   let s = seed;
@@ -80,6 +91,11 @@ describe('renk matematiği', () => {
   it('ensureFill düğme metnini zemine göre seçer, yetmezse zemini ayarlar', () => {
     expect(ensureFill('#1d5fd1').fg).toBe('#ffffff');
     expect(ensureFill('#f5c400').fg).not.toBe('#ffffff'); // sarı düğmede koyu yazı
+    // Orta tonlu turkuaz: biraz koyulaştırılıp beyaz yazı (tonu korunur)
+    const teal = ensureFill('#0f8b8d');
+    expect(teal.fg).toBe('#ffffff');
+    expect(teal.adjusted).toBe(true);
+    expect(Math.abs(hexToHsl(teal.bg).h - hexToHsl('#0f8b8d').h)).toBeLessThan(6);
     const r = rng(11);
     for (let i = 0; i < 300; i++) {
       const f = ensureFill(randomHex(r));
@@ -299,7 +315,7 @@ describe('logo dosyası', () => {
     const { px, rect } = canvas(48, 48, [0, 0, 0, 0]);
     rect(4, 4, 24, 24, rgba('#3a86ff'));
     const png = new Uint8Array(UPNG.encode([px.buffer as ArrayBuffer], 48, 48, 0));
-    const b64 = Buffer.from(png).toString('base64');
+    const b64 = toBase64(png);
     const bytes = base64ToBytes(b64);
     expect(bytes).toEqual(png);
     const img = decodePng(bytes);

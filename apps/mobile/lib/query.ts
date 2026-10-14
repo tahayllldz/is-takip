@@ -35,4 +35,6 @@ export const keys = {
   messages: (id: string) => ['messages', id] as const,
   mentions: (cid: string) => ['mentions', cid] as const,
   dashboard: (cid: string) => ['dashboard', cid, 'mobile'] as const,
+  branding: (cid: string) => ['branding', cid] as const,
+  brandLogo: (path: string) => ['brand-logo', path] as const,
 };

@@ -21,6 +21,7 @@ import {
   isFeatureEnabled,
   localDateKey,
   markConversationRead,
+  mix,
   removePendingAttachment,
   sendMessage,
   signAttachmentUrls,
@@ -39,7 +40,6 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   AppState,
   FlatList,
   Image,
@@ -54,11 +54,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Empty, ErrorView, Field, Loading, Message as Notice, colors, s } from '@/components/ui';
+import { Avatar, Button, Empty, ErrorView, Field, Icon, IconButton, Loading, Message as Notice, type IconName } from '@/components/ui';
 import { useCompany } from '@/lib/company';
+import { confirmAction } from '@/lib/confirm';
 import { keys } from '@/lib/query';
 import { prefs } from '@/lib/secure-storage';
 import { supabase } from '@/lib/supabase';
+import { radius, space, useTheme, type Theme } from '@/lib/theme';
 
 interface Pending {
   clientRequestId: string;
@@ -87,7 +89,11 @@ const pendingKey = (id: string) => `istakip.bekleyen.${id}`;
 export default function ConversationScreen() {
   const { id, m: highlightId } = useLocalSearchParams<{ id: string; m?: string }>();
   const c = useCompany();
+  const theme = useTheme();
+  const { t, s } = theme;
   const qc = useQueryClient();
+  const [acting, setActing] = useState<Message | null>(null);
+  const [olderError, setOlderError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const [older, setOlder] = useState<Message[]>([]);
   const [noMore, setNoMore] = useState(false);
@@ -232,38 +238,40 @@ export default function ConversationScreen() {
     const oldest = messages[0];
     if (!oldest) return;
     try {
+      setOlderError(null);
       const more = await fetchMessages(supabase, id, { before: oldest.created_at });
       if (more.length < 50) setNoMore(true);
       setOlder((x) => [...more, ...x]);
     } catch (e) {
-      Alert.alert('Eski mesajlar yüklenemedi', toAppError(e).message);
+      setOlderError(`Eski mesajlar yüklenemedi: ${toAppError(e).message}`);
     }
   }
 
-  function actions(msg: Message) {
-    const options: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [];
-    if (tasksOn && canPost && !tasks[msg.id]) options.push({ text: 'Göreve dönüştür', onPress: () => setConverting(msg) });
+  /** Mesaj işlemleri (alt sayfa): göreve dönüştür, sil */
+  function actionsFor(msg: Message): { label: string; icon: IconName; danger?: boolean; run: () => void }[] {
+    const out: { label: string; icon: IconName; danger?: boolean; run: () => void }[] = [];
+    if (tasksOn && canPost && !tasks[msg.id]) out.push({ label: 'Göreve dönüştür', icon: 'checkbox-outline', run: () => setConverting(msg) });
     const canDelete = msg.author_id === c.userId || (detail?.conversation.kind === 'group' && c.can('messages.moderate', groupId));
     if (canDelete && canPost) {
-      options.push({
-        text: 'Sil',
-        style: 'destructive',
-        onPress: () =>
-          Alert.alert('Mesaj silinsin mi?', 'Mesajın metni ve ekleri kimseye gösterilmez.', [
-            { text: 'Vazgeç', style: 'cancel' },
-            {
-              text: 'Sil',
-              style: 'destructive',
-              onPress: () =>
-                deleteMessage(supabase, msg.id)
-                  .then(() => qc.invalidateQueries({ queryKey: keys.messages(id) }))
-                  .catch((e) => Alert.alert('Silinemedi', toAppError(e).message)),
+      out.push({
+        label: 'Mesajı sil',
+        icon: 'trash-outline',
+        danger: true,
+        run: () =>
+          void confirmAction({ title: 'Mesaj silinsin mi?', message: 'Mesajın metni ve ekleri kimseye gösterilmez.', confirm: 'Sil', destructive: true }).then(
+            async (ok) => {
+              if (!ok) return;
+              try {
+                await deleteMessage(supabase, msg.id);
+                await qc.invalidateQueries({ queryKey: keys.messages(id) });
+              } catch (e) {
+                setOlderError(`Mesaj silinemedi: ${toAppError(e).message}`);
+              }
             },
-          ]),
+          ),
       });
     }
-    options.push({ text: 'Vazgeç', style: 'cancel' });
-    Alert.alert('Mesaj', undefined, options);
+    return out;
   }
 
   if (detailQ.isLoading || messagesQ.isLoading) return <Loading label="Mesajlar yükleniyor…" />;
@@ -283,8 +291,8 @@ export default function ConversationScreen() {
   if (!detail) {
     return (
       <View style={[s.screen, s.content]}>
-        <Empty title="Sohbet bulunamadı" text="Artık bu sohbete erişiminiz olmayabilir." />
-        <Button title="Sohbetlere dön" variant="secondary" onPress={() => router.back()} />
+        <Empty icon="chatbubbles-outline" title="Sohbet bulunamadı" text="Artık bu sohbete erişiminiz olmayabilir." />
+        <Button title="Sohbetlere dön" icon="arrow-back" variant="secondary" onPress={() => router.back()} />
       </View>
     );
   }
@@ -296,45 +304,62 @@ export default function ConversationScreen() {
     : null;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.canvas }} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: t.surface.canvas }} keyboardVerticalOffset={90}>
       <Stack.Screen options={{ title }} />
       <FlatList
         ref={listRef}
         inverted
         data={[...rows].reverse()}
         keyExtractor={(r) => r.key}
-        contentContainerStyle={{ padding: 12, gap: 8 }}
+        contentContainerStyle={{ padding: space.md, gap: space.sm }}
         keyboardShouldPersistTaps="handled"
         onScrollToIndexFailed={() => undefined}
         onEndReached={() => {
           if (!noMore && messages.length >= 50) void loadOlder();
         }}
         onEndReachedThreshold={0.2}
+        ListFooterComponent={olderError ? <Notice kind="error" text={olderError} /> : null}
         ListEmptyComponent={
           <View style={{ transform: [{ scaleY: -1 }] }}>
-            <Empty title="Henüz mesaj yok" text="İlk mesajı siz yazın." />
+            <Empty icon="chatbubble-ellipses-outline" title="Henüz mesaj yok" text="İlk mesajı siz yazın." />
           </View>
         }
         renderItem={({ item }) => {
           if (item.kind === 'day') {
             return (
-              <Text style={[s.muted, { textAlign: 'center', fontWeight: '700', marginVertical: 4 }]} accessibilityRole="header">
-                {item.label}
-              </Text>
+              <View style={{ alignItems: 'center', marginVertical: space.xs }}>
+                <Text
+                  style={[s.caption, { backgroundColor: t.surface.muted, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, overflow: 'hidden' }]}
+                  accessibilityRole="header"
+                >
+                  {item.label}
+                </Text>
+              </View>
             );
           }
           if (item.kind === 'pending') {
             const p = item.pending;
             return (
-              <View style={[bubble(true), { opacity: p.status === 'sending' ? 0.7 : 1 }]}>
+              <View style={[bubbleStyle(theme, true), { opacity: p.status === 'sending' ? 0.7 : 1 }]}>
                 {p.body ? <Text style={s.body}>{p.body}</Text> : null}
-                {p.attachments.length ? <Text style={s.muted}>📎 {p.attachments.map((a) => a.name).join(', ')}</Text> : null}
+                {p.attachments.length ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                    <Icon name="attach" size={16} />
+                    <Text style={[s.muted, { flex: 1 }]}>{p.attachments.map((a) => a.name).join(', ')}</Text>
+                  </View>
+                ) : null}
                 {p.status === 'sending' ? (
-                  <Text style={s.muted}>Gönderiliyor…</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-end' }}>
+                    <Icon name="time-outline" size={14} />
+                    <Text style={s.caption}>Gönderiliyor…</Text>
+                  </View>
                 ) : (
-                  <View style={{ gap: 6 }} accessibilityLiveRegion="polite">
-                    <Text style={[s.body, { color: colors.danger, fontWeight: '700' }]}>⚠ Gönderilemedi: {p.error}</Text>
-                    <Button title="Tekrar dene" variant="secondary" onPress={() => void trySend(p)} />
+                  <View style={{ gap: space.sm }} accessibilityLiveRegion="polite">
+                    <View style={{ flexDirection: 'row', gap: space.xs, alignItems: 'flex-start' }}>
+                      <Icon name="alert-circle" size={18} color={t.status.danger.fg} />
+                      <Text style={[s.body, { color: t.status.danger.fg, fontWeight: '700', flex: 1 }]}>Gönderilemedi: {p.error}</Text>
+                    </View>
+                    <Button title="Tekrar dene" icon="refresh" variant="secondary" compact onPress={() => void trySend(p)} />
                   </View>
                 )}
               </View>
@@ -350,14 +375,18 @@ export default function ConversationScreen() {
               urls={urls}
               task={tasks[m.id]}
               highlighted={m.id === highlightId}
-              onActions={tasksOn || m.author_id === c.userId || c.can('messages.moderate', groupId) ? () => actions(m) : undefined}
+              onActions={actionsFor(m).length ? () => setActing(m) : undefined}
             />
           );
         }}
       />
       {blockReason ? (
-        <View style={{ padding: 12, backgroundColor: colors.warnSoft, borderTopWidth: 1, borderColor: colors.line }} accessibilityRole="text">
-          <Text style={[s.body, { color: colors.warn, fontWeight: '600' }]}>⚠ {blockReason}</Text>
+        <View
+          style={{ flexDirection: 'row', gap: space.sm, padding: space.md, backgroundColor: t.status.warning.bg, borderTopWidth: 1, borderColor: t.status.warning.border }}
+          accessibilityRole="text"
+        >
+          <Icon name="lock-closed-outline" size={20} color={t.status.warning.fg} />
+          <Text style={[s.body, { color: t.status.warning.fg, fontWeight: '600', flex: 1 }]}>{blockReason}</Text>
         </View>
       ) : (
         <Composer companyId={c.companyId!} conversationId={id} members={members.filter((p) => p.id !== c.userId)} onSubmit={submit} />
@@ -369,13 +398,64 @@ export default function ConversationScreen() {
           myId={c.userId}
           canAssignOthers={c.can('tasks.assign', groupId)}
           onClose={() => setConverting(null)}
-          onCreated={(t) => {
-            setTasks((x) => ({ ...x, [t.source_message_id]: t }));
+          onCreated={(link) => {
+            setTasks((x) => ({ ...x, [link.source_message_id]: link }));
             void qc.invalidateQueries({ queryKey: ['tasks'] });
           }}
         />
       ) : null}
+      {acting ? <ActionSheet title="Mesaj işlemleri" options={actionsFor(acting)} onClose={() => setActing(null)} /> : null}
     </KeyboardAvoidingView>
+  );
+}
+
+/** Alt sayfa: her platformda çalışan, erişilebilir işlem menüsü */
+function ActionSheet({
+  title,
+  options,
+  onClose,
+}: {
+  title: string;
+  options: { label: string; icon: IconName; danger?: boolean; run: () => void }[];
+  onClose: () => void;
+}) {
+  const { t, s } = useTheme();
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Kapat" onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(15, 23, 32, 0.45)' }} />
+      <SafeAreaView edges={['bottom']} style={{ backgroundColor: t.surface.default, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg }}>
+        <View style={{ padding: space.lg, gap: space.xs }}>
+          <Text style={[s.heading, { fontSize: 18, marginBottom: space.sm }]} accessibilityRole="header">
+            {title}
+          </Text>
+          {options.map((o) => (
+            <Pressable
+              key={o.label}
+              accessibilityRole="button"
+              onPress={() => {
+                onClose();
+                o.run();
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.md,
+                minHeight: 52,
+                paddingHorizontal: space.sm,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? t.surface.muted : 'transparent',
+              })}
+            >
+              <Icon name={o.icon} size={22} color={o.danger ? t.status.danger.fg : t.text.primary} />
+              <Text style={[s.body, { fontWeight: '600', color: o.danger ? t.status.danger.fg : t.text.primary }]}>{o.label}</Text>
+            </Pressable>
+          ))}
+          <View style={{ marginTop: space.sm }}>
+            <Button title="Vazgeç" variant="secondary" onPress={onClose} />
+          </View>
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -399,15 +479,19 @@ function buildRows(messages: Message[], pending: Pending[], tz: string): Row[] {
   return rows;
 }
 
-const bubble = (mine: boolean) => ({
+/** Kendi mesajı sağda seçim tonunda; diğerleri solda kart renginde (ayrım yazar adıyla da yapılır) */
+const bubbleStyle = ({ t }: Theme, mine: boolean) => ({
   alignSelf: (mine ? 'flex-end' : 'flex-start') as 'flex-end' | 'flex-start',
-  maxWidth: '88%' as const,
-  backgroundColor: mine ? colors.brandSoft : colors.surface,
-  borderColor: mine ? '#bcd2f7' : colors.line,
+  maxWidth: '86%' as const,
+  backgroundColor: mine ? t.selection.bg : t.surface.card,
+  borderColor: mine ? mix(t.selection.bg, t.selection.fg, 0.22) : t.border.card,
   borderWidth: 1,
-  borderRadius: 16,
-  padding: 10,
-  gap: 4,
+  borderRadius: radius.lg,
+  borderBottomRightRadius: mine ? radius.sm / 2 : radius.lg,
+  borderBottomLeftRadius: mine ? radius.lg : radius.sm / 2,
+  paddingHorizontal: space.md,
+  paddingVertical: space.sm + 2,
+  gap: space.xs,
 });
 
 function MessageBubble({
@@ -429,77 +513,118 @@ function MessageBubble({
   highlighted: boolean;
   onActions?: () => void;
 }) {
+  const theme = useTheme();
+  const { t, s } = theme;
   const mine = m.author_id === myId;
   const author = mine ? 'Siz' : nameOf(m.author_id);
   const mentioned = m.mentions.map((x) => ({ id: x.user_id, name: nameOf(x.user_id) }));
   const mentionsMe = m.mentions.some((x) => x.user_id === myId);
   return (
-    <View style={[bubble(mine), highlighted ? { borderColor: colors.brand, borderWidth: 3 } : null]}>
-      <Text style={s.muted}>
-        <Text style={{ fontWeight: '800', color: colors.ink }}>{author}</Text> · {formatTime(m.created_at, tz)}
-        {mentionsMe ? <Text style={{ color: colors.brand, fontWeight: '700' }}> · @ sizi etiketledi</Text> : null}
-      </Text>
-      {m.deleted_at ? (
-        <Text style={[s.muted, { fontStyle: 'italic' }]}>Bu mesaj silindi.</Text>
-      ) : (
-        <>
-          {m.body ? (
-            <Text style={s.body} selectable>
-              {splitMentions(m.body, mentioned).map((part, i) =>
-                part.userId ? (
-                  <Text key={i} style={{ fontWeight: '800', color: part.userId === myId ? colors.warn : colors.brand }}>
-                    {part.text}
-                  </Text>
-                ) : (
-                  <Text key={i}>{part.text}</Text>
-                ),
-              )}
-            </Text>
+    <View style={{ flexDirection: 'row', gap: space.sm, justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-end' }}>
+      {!mine ? <Avatar name={author} size={32} /> : null}
+      <View style={[bubbleStyle(theme, mine), { flexShrink: 1 }, highlighted ? { borderColor: t.selection.fg, borderWidth: 3 } : null]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs, flexWrap: 'wrap' }}>
+          <Text style={[s.caption, { color: t.text.primary, fontWeight: '700' }]}>{author}</Text>
+          <Text style={s.caption}>{formatTime(m.created_at, tz)}</Text>
+          {mentionsMe ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+              <Icon name="at" size={14} color={t.status.warning.fg} />
+              <Text style={[s.caption, { color: t.status.warning.fg }]}>sizi etiketledi</Text>
+            </View>
           ) : null}
-          {m.attachments.map((a) => {
-            const url = urls[a.storage_path];
-            if (a.is_image && url) {
+        </View>
+        {m.deleted_at ? (
+          <Text style={[s.muted, { fontStyle: 'italic' }]}>Bu mesaj silindi.</Text>
+        ) : (
+          <>
+            {m.body ? (
+              <Text style={s.body} selectable>
+                {splitMentions(m.body, mentioned).map((part, i) =>
+                  part.userId ? (
+                    <Text key={i} style={{ fontWeight: '700', color: part.userId === myId ? t.status.warning.fg : t.text.link }}>
+                      {part.text}
+                    </Text>
+                  ) : (
+                    <Text key={i}>{part.text}</Text>
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {m.attachments.map((a) => {
+              const url = urls[a.storage_path];
+              if (a.is_image && url) {
+                return (
+                  <Pressable key={a.id} accessibilityRole="imagebutton" accessibilityLabel={`Fotoğraf: ${a.file_name}. Açmak için dokunun.`} onPress={() => void Linking.openURL(url)}>
+                    <Image source={{ uri: url }} style={{ width: 220, height: 160, borderRadius: radius.md, backgroundColor: t.surface.muted }} resizeMode="cover" />
+                  </Pressable>
+                );
+              }
               return (
-                <Pressable key={a.id} accessibilityRole="imagebutton" accessibilityLabel={`Fotoğraf: ${a.file_name}. Açmak için dokunun.`} onPress={() => void Linking.openURL(url)}>
-                  <Image source={{ uri: url }} style={{ width: 220, height: 160, borderRadius: 10, backgroundColor: colors.neutralSoft }} resizeMode="cover" />
+                <Pressable
+                  key={a.id}
+                  accessibilityRole="link"
+                  accessibilityLabel={`Dosya: ${a.file_name}. Açmak için dokunun.`}
+                  disabled={!url}
+                  onPress={() => url && void Linking.openURL(url)}
+                  style={{
+                    minHeight: 44,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: space.sm,
+                    borderWidth: 1,
+                    borderColor: t.border.default,
+                    borderRadius: radius.md,
+                    paddingHorizontal: space.md,
+                    backgroundColor: t.surface.default,
+                  }}
+                >
+                  <Icon name="document-attach-outline" size={20} color={t.text.link} />
+                  <Text style={[s.body, { flexShrink: 1, color: url ? t.text.link : t.text.secondary }]} numberOfLines={1}>
+                    {a.file_name}
+                    {url ? '' : ' (hazırlanıyor…)'}
+                  </Text>
                 </Pressable>
               );
-            }
-            return (
-              <Pressable
-                key={a.id}
-                accessibilityRole="link"
-                accessibilityLabel={`Dosya: ${a.file_name}. Açmak için dokunun.`}
-                disabled={!url}
-                onPress={() => url && void Linking.openURL(url)}
-                style={{ minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 10, backgroundColor: colors.surface }}
-              >
-                <Text style={[s.body, { textDecorationLine: url ? 'underline' : 'none' }]} numberOfLines={1}>
-                  📎 {a.file_name}
-                  {url ? '' : ' (hazırlanıyor…)'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </>
-      )}
-      {task ? (
-        <Pressable accessibilityRole="link" onPress={() => router.push(`/gorev/${task.id}`)} style={{ minHeight: 44, justifyContent: 'center' }}>
-          <Text style={[s.body, { color: colors.brand, textDecorationLine: 'underline' }]}>
-            ☑ Görev: {task.title} ({TASK_STATUS_META[task.status].symbol} {TASK_STATUS_META[task.status].label})
-          </Text>
-        </Pressable>
-      ) : null}
-      {onActions && !m.deleted_at ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${author} mesajı için işlemler`}
-          onPress={onActions}
-          style={{ alignSelf: mine ? 'flex-end' : 'flex-start', minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 8 }}
-        >
-          <Text style={[s.muted, { fontWeight: '700' }]}>⋯ İşlemler</Text>
-        </Pressable>
-      ) : null}
+            })}
+          </>
+        )}
+        {task ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Bu mesajdan oluşturulan görev: ${task.title}, ${TASK_STATUS_META[task.status].label}`}
+            onPress={() => router.push(`/gorev/${task.id}`)}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.sm,
+              borderRadius: radius.md,
+              paddingHorizontal: space.md,
+              backgroundColor: t.surface.default,
+              borderWidth: 1,
+              borderColor: t.border.default,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <Icon name="checkbox-outline" size={18} color={t.text.link} />
+            <Text style={[s.muted, { flexShrink: 1, color: t.text.link, fontWeight: '600' }]} numberOfLines={2}>
+              Görev: {task.title} · {TASK_STATUS_META[task.status].label}
+            </Text>
+          </Pressable>
+        ) : null}
+        {onActions && !m.deleted_at ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${author} mesajı için işlemler`}
+            onPress={onActions}
+            hitSlop={4}
+            style={{ alignSelf: mine ? 'flex-end' : 'flex-start', minHeight: 44, minWidth: 44, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.xs }}
+          >
+            <Icon name="ellipsis-horizontal" size={18} />
+            <Text style={[s.caption, { fontWeight: '600' }]}>İşlemler</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -515,6 +640,7 @@ function Composer({
   members: Person[];
   onSubmit: (input: { body: string; mentionIds: string[]; attachments: { path: string; name: string }[] }) => void;
 }) {
+  const { t, s } = useTheme();
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
   const [mentions, setMentions] = useState<Person[]>([]);
@@ -612,30 +738,66 @@ function Composer({
     setError(null);
   }
 
+  const tool = ({ pressed }: { pressed: boolean }) => ({
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: pressed ? t.surface.muted : 'transparent',
+  });
+
   return (
-    <View style={{ borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, padding: 10, gap: 8 }}>
+    <View style={{ borderTopWidth: 1, borderColor: t.border.default, backgroundColor: t.surface.default, paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.sm }}>
       {suggestions.length ? (
-        <View accessibilityLabel="Etiketlenecek kişi önerileri" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View accessibilityLabel="Etiketlenecek kişi önerileri" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.xs }}>
           {suggestions.map((p) => (
             <Pressable
               key={p.id}
               accessibilityRole="button"
               accessibilityLabel={`${p.name} kişisini etiketle`}
               onPress={() => pick(p)}
-              style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandSoft }}
+              style={{
+                minHeight: 44,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.xs,
+                paddingHorizontal: space.md,
+                borderRadius: radius.pill,
+                borderWidth: 1,
+                borderColor: t.selection.border,
+                backgroundColor: t.selection.bg,
+              }}
             >
-              <Text style={{ color: colors.brand, fontWeight: '700', fontSize: 15 }}>@{p.name}</Text>
+              <Icon name="at" size={16} color={t.selection.fg} />
+              <Text style={{ color: t.selection.fg, fontWeight: '700', fontSize: 16 }}>{p.name}</Text>
             </Pressable>
           ))}
         </View>
       ) : null}
       {chips.length ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.xs }}>
           {chips.map((x) => (
-            <View key={x.uploadId} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: x.status === 'error' ? '#f1b8b2' : colors.line, borderRadius: 999, paddingLeft: 10, backgroundColor: x.status === 'error' ? colors.dangerSoft : colors.neutralSoft }}>
-              {x.status === 'uploading' ? <ActivityIndicator size="small" color={colors.brand} /> : null}
-              <Text style={{ fontSize: 14, maxWidth: 160 }} numberOfLines={1}>
-                📎 {x.name}
+            <View
+              key={x.uploadId}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.xs,
+                borderWidth: 1,
+                borderColor: x.status === 'error' ? t.status.danger.border : t.border.default,
+                borderRadius: radius.pill,
+                paddingLeft: space.md,
+                backgroundColor: x.status === 'error' ? t.status.danger.bg : t.surface.muted,
+              }}
+            >
+              {x.status === 'uploading' ? (
+                <ActivityIndicator size="small" color={t.text.link} accessibilityLabel="Yükleniyor" />
+              ) : (
+                <Icon name={x.status === 'error' ? 'alert-circle' : 'checkmark-circle'} size={16} color={x.status === 'error' ? t.status.danger.fg : t.status.success.fg} />
+              )}
+              <Text style={{ fontSize: 14, maxWidth: 180, color: x.status === 'error' ? t.status.danger.fg : t.text.primary }} numberOfLines={1}>
+                {x.name}
                 {x.status === 'error' ? ` — ${x.error}` : ''}
               </Text>
               <Pressable
@@ -645,52 +807,62 @@ function Composer({
                   setChips((list) => list.filter((y) => y.uploadId !== x.uploadId));
                   if (x.path) void removePendingAttachment(supabase, x.path).catch(() => undefined);
                 }}
-                style={{ minHeight: 40, minWidth: 40, alignItems: 'center', justifyContent: 'center' }}
+                style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ fontSize: 18, fontWeight: '700' }}>×</Text>
+                <Icon name="close" size={18} color={t.text.primary} />
               </Pressable>
             </View>
           ))}
         </View>
       ) : null}
-      {error ? <Text style={s.error}>{error}</Text> : null}
-      <TextInput
-        accessibilityLabel="Mesaj yazın"
-        accessibilityHint="Kişi etiketlemek için @ yazın. Etiketlenen kişiye bildirim gider; etiketlemek görev atamak değildir."
-        placeholder="Mesaj yazın… (@ ile etiketleyin)"
-        placeholderTextColor="#7a8591"
-        multiline
-        maxLength={4000}
-        value={text}
-        onChangeText={setText}
-        onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
-        style={[s.input, { maxHeight: 120 }]}
-      />
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Fotoğraf ekle" onPress={() => void pickPhotos()} style={toolButton}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>📷 Fotoğraf</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Dosya ekle" onPress={() => void pickFiles()} style={toolButton}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>📎 Dosya</Text>
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Button title={uploading ? 'Yükleniyor…' : 'Gönder'} onPress={send} disabled={!canSend} />
+      {error ? (
+        <View style={{ flexDirection: 'row', gap: space.xs, paddingHorizontal: space.xs }} accessibilityLiveRegion="polite">
+          <Icon name="alert-circle" size={16} color={t.status.danger.fg} />
+          <Text style={{ color: t.status.danger.fg, fontSize: 16, flex: 1 }}>{error}</Text>
         </View>
+      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.xs }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fotoğraf ekle" onPress={() => void pickPhotos()} style={tool}>
+          <Icon name="camera-outline" size={24} color={t.text.primary} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Dosya ekle" onPress={() => void pickFiles()} style={tool}>
+          <Icon name="attach" size={24} color={t.text.primary} />
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Mesaj yazın"
+          accessibilityHint="Kişi etiketlemek için @ yazın. Etiketlenen kişiye bildirim gider; etiketlemek görev atamak değildir."
+          placeholder="Mesaj yazın… (@ ile etiketleyin)"
+          placeholderTextColor={t.text.disabled}
+          selectionColor={t.border.focus}
+          multiline
+          maxLength={4000}
+          value={text}
+          onChangeText={setText}
+          onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
+          style={[s.input, { flex: 1, maxHeight: 120, borderRadius: radius.lg, minHeight: 48 }]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={uploading ? 'Dosya yükleniyor, bekleyin' : 'Gönder'}
+          accessibilityState={{ disabled: !canSend }}
+          disabled={!canSend}
+          onPress={send}
+          style={({ pressed }) => ({
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: t.action.primary.bg,
+            opacity: !canSend ? 0.4 : pressed ? 0.85 : 1,
+          })}
+        >
+          {uploading ? <ActivityIndicator color={t.action.primary.fg} /> : <Icon name="send" size={20} color={t.action.primary.fg} />}
+        </Pressable>
       </View>
     </View>
   );
 }
-
-const toolButton = {
-  minHeight: 48,
-  paddingHorizontal: 12,
-  borderWidth: 1,
-  borderColor: colors.line,
-  borderRadius: 12,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  backgroundColor: colors.surface,
-};
 
 const DUE_OPTIONS = [
   { key: 'none', label: 'Son tarih yok', days: null },
@@ -715,6 +887,7 @@ function ConvertModal({
   onCreated: (t: MessageTaskLink) => void;
 }) {
   const c = useCompany();
+  const { t, s } = useTheme();
   const [requestId] = useState(() => Crypto.randomUUID());
   let firstLine = message.body.split('\n')[0] ?? '';
   for (const mm of message.mentions) {
@@ -756,28 +929,47 @@ function ConvertModal({
     }
   }
 
-  const chip = (selected: boolean) => ({
-    minHeight: 44,
-    justifyContent: 'center' as const,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: selected ? colors.brand : colors.line,
-    backgroundColor: selected ? colors.brandSoft : colors.surface,
-  });
+  /** Seçenek düğmesi: seçili olan işaret simgesi + kalın yazı + renkle ayrılır */
+  function Choice({ selected, label, onPress }: { selected: boolean; label: string; onPress: () => void }) {
+    return (
+      <Pressable
+        accessibilityRole="radio"
+        accessibilityState={{ checked: selected }}
+        onPress={onPress}
+        style={{
+          minHeight: 44,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: space.xs,
+          paddingHorizontal: space.md,
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: selected ? t.selection.border : t.border.default,
+          backgroundColor: selected ? t.selection.bg : t.surface.default,
+        }}
+      >
+        {selected ? <Icon name="checkmark" size={16} color={t.selection.fg} /> : null}
+        <Text style={{ fontSize: 16, fontWeight: selected ? '700' : '600', color: selected ? t.selection.fg : t.text.primary }}>{label}</Text>
+      </Pressable>
+    );
+  }
 
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={s.screen}>
-        <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <Text style={s.h1} accessibilityRole="header">
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingBottom: 0 }}>
+          <Text style={[s.heading, { flex: 1 }]} accessibilityRole="header">
             Mesajı göreve dönüştür
           </Text>
+          <IconButton icon="close" label="Kapat" onPress={onClose} />
+        </View>
+        <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
           {created ? (
             <>
               <Notice kind="success" text={assignee === myId ? 'Görev oluşturuldu ve size verildi.' : 'Görev oluşturuldu; sorumluya bildirildi.'} />
               <Button
                 title="Göreve git"
+                icon="arrow-forward"
                 onPress={() => {
                   onClose();
                   router.push(`/gorev/${created.id}`);
@@ -787,44 +979,46 @@ function ConvertModal({
             </>
           ) : (
             <>
-              <View style={[s.card, { backgroundColor: colors.neutralSoft }]}>
-                <Text style={s.body}>{message.body || 'Dosya mesajı'}</Text>
+              <View style={{ flexDirection: 'row', gap: space.sm, backgroundColor: t.surface.muted, borderRadius: radius.md, padding: space.md }}>
+                <Icon name="chatbubble-outline" size={20} />
+                <Text style={[s.body, { flex: 1 }]}>{message.body || 'Dosya mesajı'}</Text>
               </View>
               <Text style={s.muted}>Mesaj metni görevin açıklamasına eklenir; görev bu mesaja bağlanır.</Text>
               <Field label="Görev başlığı" value={title} onChangeText={setTitle} maxLength={200} error={error && !title.trim() ? error : undefined} />
-              <Text style={s.label}>Sorumlu</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
-                {options.map((p) => (
-                  <Pressable key={p.id} accessibilityRole="radio" aria-checked={assignee === p.id} onPress={() => setAssignee(p.id)} style={chip(assignee === p.id)}>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: assignee === p.id ? colors.brand : colors.ink }}>
-                      {p.name}
-                      {p.id === myId ? ' (ben)' : ''}
-                    </Text>
-                  </Pressable>
-                ))}
+              <View style={{ gap: space.sm }}>
+                <Text style={s.label}>Sorumlu</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }} accessibilityRole="radiogroup" accessibilityLabel="Sorumlu">
+                  {options.map((p) => (
+                    <Choice key={p.id} selected={assignee === p.id} label={`${p.name}${p.id === myId ? ' (ben)' : ''}`} onPress={() => setAssignee(p.id)} />
+                  ))}
+                </View>
+                {!canAssignOthers ? <Text style={s.muted}>Başkasına görev atama yetkiniz yok; görev size verilir.</Text> : null}
               </View>
-              {!canAssignOthers ? <Text style={s.muted}>Başkasına görev atama yetkiniz yok; görev size verilir.</Text> : null}
-              <Text style={s.label}>Son tarih</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
-                {DUE_OPTIONS.map((d) => (
-                  <Pressable key={d.key} accessibilityRole="radio" aria-checked={due === d.key} onPress={() => setDue(d.key)} style={chip(due === d.key)}>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: due === d.key ? colors.brand : colors.ink }}>{d.label}</Text>
-                  </Pressable>
-                ))}
+              <View style={{ gap: space.sm }}>
+                <Text style={s.label}>Son tarih</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }} accessibilityRole="radiogroup" accessibilityLabel="Son tarih">
+                  {DUE_OPTIONS.map((d) => (
+                    <Choice key={d.key} selected={due === d.key} label={d.label} onPress={() => setDue(d.key)} />
+                  ))}
+                </View>
               </View>
-              <Text style={s.label}>Öncelik</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
-                {TASK_PRIORITIES.map((p) => (
-                  <Pressable key={p} accessibilityRole="radio" aria-checked={priority === p} onPress={() => setPriority(p)} style={chip(priority === p)}>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: priority === p ? colors.brand : colors.ink }}>
-                      {TASK_PRIORITY_META[p].symbol} {TASK_PRIORITY_META[p].label}
-                    </Text>
-                  </Pressable>
-                ))}
+              <View style={{ gap: space.sm }}>
+                <Text style={s.label}>Öncelik</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }} accessibilityRole="radiogroup" accessibilityLabel="Öncelik">
+                  {TASK_PRIORITIES.map((p) => (
+                    <Choice key={p} selected={priority === p} label={TASK_PRIORITY_META[p].label} onPress={() => setPriority(p)} />
+                  ))}
+                </View>
               </View>
               {error && title.trim() ? <Notice kind="error" text={error} /> : null}
-              <Button title={busy ? 'Oluşturuluyor…' : 'Görevi oluştur'} onPress={() => void submit()} busy={busy} />
-              <Button title="Vazgeç" variant="secondary" onPress={onClose} />
+              <View style={{ flexDirection: 'row', gap: space.md }}>
+                <View style={{ flex: 1 }}>
+                  <Button title="Vazgeç" variant="secondary" onPress={onClose} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button title={busy ? 'Oluşturuluyor…' : 'Oluştur'} icon="checkbox-outline" onPress={() => void submit()} busy={busy} />
+                </View>
+              </View>
             </>
           )}
         </ScrollView>
